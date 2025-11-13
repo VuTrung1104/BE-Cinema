@@ -1,74 +1,138 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
-import { UsersService, UserEntity } from '../users/users.service.js';
-
-type AuthUser = Pick<UserEntity, 'id' | 'email' | 'fullName'>;
+import { User, UserDocument } from '../users/schemas/user.schema';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly usersService: UsersService,
-    private readonly jwtService: JwtService,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private jwtService: JwtService,
   ) {}
 
-  async validateUser(
-    email: string,
-    password: string,
-  ): Promise<AuthUser | null> {
-    const user = this.usersService.findByEmail(email);
-    if (!user) return null;
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) return null;
-    const { id, email: e, fullName } = user;
-    return { id, email: e, fullName };
+  async register(registerDto: RegisterDto) {
+    const { email, password, fullName, phone, role } = registerDto;
+
+    // Check if user already exists
+    const existingUser = await this.userModel.findOne({ email });
+    if (existingUser) {
+      throw new ConflictException('Email already exists');
+    }
+
+    // Create user (password will be hashed by pre-save hook)
+    const user = new this.userModel({
+      email,
+      password,
+      fullName,
+      phone,
+      role,
+    });
+
+    await user.save();
+
+    // Generate token
+    const accessToken = this.generateToken(user);
+
+    return {
+      user: {
+        id: user._id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      accessToken,
+    };
   }
 
-  async login(user: AuthUser) {
-    const payload = {
-      sub: user.id,
+  async login(loginDto: LoginDto) {
+    const { email, password } = loginDto;
+
+    // Find user and explicitly select password field
+    const user = await this.userModel.findOne({ email }).select('+password').exec();
+    
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is inactive');
+    }
+
+    // Verify password using schema method
+    const isPasswordValid = await user.comparePassword(password);
+    
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // Generate token
+    const accessToken = this.generateToken(user);
+
+    return {
+      user: {
+        id: user._id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      accessToken,
+    };
+  }
+
+  async validateUser(userId: string): Promise<UserDocument> {
+    const user = await this.userModel.findById(userId).exec();
+    
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is inactive');
+    }
+
+    return user;
+  }
+
+  async validateUserCredentials(email: string, password: string): Promise<any> {
+    // Find user and explicitly select password field
+    const user = await this.userModel.findOne({ email }).select('+password').exec();
+    
+    if (!user) {
+      return null;
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      return null;
+    }
+
+    // Verify password using schema method
+    const isPasswordValid = await user.comparePassword(password);
+    
+    if (!isPasswordValid) {
+      return null;
+    }
+
+    // Return user without password
+    return {
+      id: user._id,
       email: user.email,
       fullName: user.fullName,
-    };
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
-        expiresIn: '15m',
-        secret: process.env.JWT_SECRET || 'dev-secret',
-      }),
-      this.jwtService.signAsync(payload, {
-        expiresIn: '7d',
-        secret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
-      }),
-    ]);
-    return {
-      accessToken,
-      refreshToken,
-      user: payload,
+      role: user.role,
     };
   }
 
-  async refreshToken(refreshToken: string) {
-    const decoded = await this.jwtService.verifyAsync<{
-      sub: number;
-      email: string;
-      fullName: string;
-    }>(refreshToken, {
-      secret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
-    });
+  private generateToken(user: UserDocument): string {
     const payload = {
-      sub: decoded.sub,
-      email: decoded.email,
-      fullName: decoded.fullName,
+      sub: user._id.toString(),
+      email: user.email,
+      role: user.role,
     };
-    const accessToken = await this.jwtService.signAsync(payload, {
-      expiresIn: '15m',
-      secret: process.env.JWT_SECRET || 'dev-secret',
-    });
-    // rotate refresh token
-    const newRefreshToken = await this.jwtService.signAsync(payload, {
-      expiresIn: '7d',
-      secret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
-    });
-    return { accessToken, refreshToken: newRefreshToken, user: payload };
+
+    return this.jwtService.sign(payload);
   }
 }

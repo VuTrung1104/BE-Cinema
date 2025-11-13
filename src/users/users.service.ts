@@ -1,30 +1,60 @@
-import { Injectable } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
-
-export type UserEntity = {
-  id: number;
-  email: string;
-  passwordHash: string;
-  fullName: string;
-};
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User, UserDocument } from './schemas/user.schema';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
-  private readonly users: UserEntity[] = [];
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+  ) {}
 
-  constructor() {
-    // Seed one demo user: username: admin, password: admin123
-    const password = 'admin123';
-    const passwordHash = bcrypt.hashSync(password, 10);
-    this.users.push({
-      id: 1,
-      email: 'admin@example.com',
-      passwordHash,
-      fullName: 'Admin',
-    });
+  async findAll() {
+    return this.userModel.find().select('-password').exec();
   }
 
-  findByEmail(email: string): UserEntity | undefined {
-    return this.users.find((u) => u.email === email);
+  async findOne(id: string) {
+    const user = await this.userModel.findById(id).select('-password').exec();
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    return user;
+  }
+
+  async findByEmail(email: string) {
+    return this.userModel.findOne({ email }).exec();
+  }
+
+  async updateProfile(userId: string, updateUserDto: UpdateUserDto) {
+    const { email, ...updateData } = updateUserDto;
+
+    // If email is being updated, check if it's already taken
+    if (email) {
+      const existingUser = await this.userModel.findOne({ 
+        email, 
+        _id: { $ne: userId } 
+      });
+      
+      if (existingUser) {
+        throw new ConflictException('Email is already in use');
+      }
+      updateData['email'] = email;
+    }
+
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, updateData, { new: true })
+      .select('-password')
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    return user;
+  }
+
+  async getProfile(userId: string) {
+    return this.findOne(userId);
   }
 }

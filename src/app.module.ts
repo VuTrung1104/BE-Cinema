@@ -1,17 +1,35 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { DatabaseModule } from './database/database.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { MoviesModule } from './movies/movies.module';
+import { TheatersModule } from './theaters/theaters.module';
+import { ShowtimesModule } from './showtimes/showtimes.module';
+import { BookingsModule } from './bookings/bookings.module';
+import { PaymentsModule } from './payments/payments.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { UsersModule } from './users/users.module';
-import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
+    // ConfigModule setup - Global configuration
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: '.env',
     }),
-    UsersModule,
+    
+    // Database connection
+    DatabaseModule,
+    
+    // Feature modules
     AuthModule,
+    UsersModule,
+    MoviesModule,
+    TheatersModule,
+    ShowtimesModule,
+    BookingsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

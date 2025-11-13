@@ -1,32 +1,41 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy } from 'passport-jwt';
-import type { StrategyOptions, JwtFromRequestFunction } from 'passport-jwt';
-import type { Request } from 'express';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { ConfigService } from '@nestjs/config';
+import { AuthService } from '../auth.service';
+
+export interface JwtPayload {
+  sub: string;
+  email: string;
+  role: string;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
-    const jwtFromRequest: JwtFromRequestFunction = (req: Request) => {
-      const authHeader = req.get('authorization') ?? req.headers?.authorization;
-      if (!authHeader) return null;
-      const [scheme, token] = authHeader.split(' ');
-      if (!scheme || scheme.toLowerCase() !== 'bearer' || !token) return null;
-      return token;
-    };
+  constructor(
+    private configService: ConfigService,
+    private authService: AuthService,
+  ) {
     super({
-      jwtFromRequest,
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'dev-secret',
-    } as StrategyOptions);
+      secretOrKey: configService.get<string>('JWT_SECRET'),
+    });
   }
 
-  validate(payload: { sub: number; email: string; fullName: string }) {
+  async validate(payload: JwtPayload) {
+    // Validate user still exists and is active
+    const user = await this.authService.validateUser(payload.sub);
+    
+    if (!user) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+
+    // Return user data to be attached to request object
     return {
       userId: payload.sub,
       email: payload.email,
-      fullName: payload.fullName,
+      role: payload.role,
     };
   }
 }

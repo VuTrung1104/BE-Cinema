@@ -1,28 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile } from 'passport-facebook';
-import type { UserEntity } from '../../users/users.service.js';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
-  constructor() {
+  constructor(private readonly configService: ConfigService) {
     super({
-      clientID: process.env.FACEBOOK_APP_ID || '',
-      clientSecret: process.env.FACEBOOK_APP_SECRET || '',
-      callbackURL: process.env.FACEBOOK_CALLBACK_URL || '',
+      clientID: configService.get<string>('FACEBOOK_APP_ID', ''),
+      clientSecret: configService.get<string>('FACEBOOK_APP_SECRET', ''),
+      callbackURL: configService.get<string>('FACEBOOK_CALLBACK_URL', 'http://localhost:3000/api/v1/auth/facebook/callback'),
       profileFields: ['id', 'displayName', 'emails'],
       scope: ['email'],
     });
   }
 
-  validate(_accessToken: string, _refreshToken: string, profile: Profile) {
-    const email = (profile.emails?.[0]?.value as string) ?? '';
+  async validate(_accessToken: string, _refreshToken: string, profile: Profile) {
+    const email = profile.emails?.[0]?.value ?? '';
     const fullName = profile.displayName ?? 'User';
-    const authUser: Pick<UserEntity, 'id' | 'email' | 'fullName'> = {
-      id: Number(profile.id) || Date.now(),
+    
+    return {
       email,
       fullName,
+      facebookId: profile.id,
     };
-    return authUser;
   }
 }

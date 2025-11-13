@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile } from 'passport-google-oauth20';
 import { ConfigService } from '@nestjs/config';
-import type { UserEntity } from '../../users/users.service.js';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -10,19 +9,19 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     super({
       clientID: configService.get<string>('GOOGLE_CLIENT_ID', ''),
       clientSecret: configService.get<string>('GOOGLE_CLIENT_SECRET', ''),
-      callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL'),
+      callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL', 'http://localhost:3000/api/v1/auth/google/callback'),
       scope: ['email', 'profile'],
     });
   }
 
-  validate(_accessToken: string, _refreshToken: string, profile: Profile) {
+  async validate(_accessToken: string, _refreshToken: string, profile: Profile) {
     const email = profile.emails?.[0]?.value ?? '';
     const fullName = profile.displayName ?? profile.name?.givenName ?? 'User';
-    const authUser: Pick<UserEntity, 'id' | 'email' | 'fullName'> = {
-      id: Number(profile.id) || Date.now(),
+    
+    return {
       email,
       fullName,
+      googleId: profile.id,
     };
-    return authUser;
   }
 }

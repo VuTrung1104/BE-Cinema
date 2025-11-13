@@ -1,71 +1,48 @@
-import {
-  Controller,
-  Post,
-  Request,
-  UseGuards,
-  Body,
-  Get,
-  Res,
-} from '@nestjs/common';
-import { AuthService } from './auth.service.js';
-import { LocalAuthGuard } from './guards/local-auth.guard.js';
-import type { UserEntity } from '../users/users.service.js';
-import { AuthGuard } from '@nestjs/passport';
-import type { Response } from 'express';
-interface AuthenticatedRequest {
-  user: Omit<UserEntity, 'passwordHash'>;
-}
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { GetUser } from './decorators/get-user.decorator';
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @UseGuards(LocalAuthGuard)
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register a new user', description: 'Create a new user account with email and password' })
+  @ApiBody({ type: RegisterDto })
+  @ApiResponse({ status: 201, description: 'User successfully registered' })
+  @ApiResponse({ status: 409, description: 'Email already exists' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  async register(@Body() registerDto: RegisterDto) {
+    return this.authService.register(registerDto);
+  }
+
   @Post('login')
-  async login(@Request() req: AuthenticatedRequest) {
-    return this.authService.login(req.user);
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Login user', description: 'Authenticate user and receive JWT access token' })
+  @ApiBody({ type: LoginDto })
+  @ApiResponse({ status: 200, description: 'Login successful, returns user info and access token' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  async login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto);
   }
 
-  @Post('refresh')
-  async refresh(@Body() body: { refreshToken: string }) {
-    return this.authService.refreshToken(body.refreshToken);
-  }
-
-  @UseGuards(AuthGuard('google'))
-  @Get('google')
-  async googleLogin() {}
-
-  @UseGuards(AuthGuard('google'))
-  @Get('google/callback')
-  async googleCallback(
-    @Request() req: AuthenticatedRequest,
-    @Res() res: Response,
-  ) {
-    const result = await this.authService.login(req.user);
-    const url =
-      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/callback` +
-      `?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}&user=${encodeURIComponent(
-        JSON.stringify(result.user),
-      )}`;
-    return res.redirect(url);
-  }
-
-  @UseGuards(AuthGuard('facebook'))
-  @Get('facebook')
-  async facebookLogin() {}
-
-  @UseGuards(AuthGuard('facebook'))
-  @Get('facebook/callback')
-  async facebookCallback(
-    @Request() req: AuthenticatedRequest,
-    @Res() res: Response,
-  ) {
-    const result = await this.authService.login(req.user);
-    const url =
-      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/callback` +
-      `?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}&user=${encodeURIComponent(
-        JSON.stringify(result.user),
-      )}`;
-    return res.redirect(url);
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout user', description: 'Logout endpoint (JWT is stateless, client should remove token)' })
+  @ApiResponse({ status: 200, description: 'Logout message returned' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing token' })
+  async logout(@GetUser('userId') userId: string) {
+    return {
+      message: 'Logout successful. Please remove the token from client storage.',
+    };
   }
 }
