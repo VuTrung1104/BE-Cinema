@@ -3,13 +3,29 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { LoggerService } from './common/logger/logger.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: new LoggerService(),
+  });
   const configService = app.get(ConfigService);
   
   // Enable CORS
-  app.enableCors();
+  app.enableCors({
+    origin: configService.get<string>('FRONTEND_URL') || '*',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+  
+  // Global exception filter for error handling
+  app.useGlobalFilters(new HttpExceptionFilter());
+  
+  // Global logging interceptor
+  app.useGlobalInterceptors(new LoggingInterceptor());
   
   // Global validation pipe
   app.useGlobalPipes(

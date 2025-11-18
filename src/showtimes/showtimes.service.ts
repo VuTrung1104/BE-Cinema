@@ -82,6 +82,17 @@ export class ShowtimesService {
     return showtime.save();
   }
 
+  async releaseSeats(id: string, seats: string[]) {
+    const showtime = await this.findOne(id);
+    
+    // Remove seats from booked list
+    showtime.bookedSeats = showtime.bookedSeats.filter(
+      seat => !seats.includes(seat)
+    );
+    
+    return showtime.save();
+  }
+
   async remove(id: string) {
     const result = await this.showtimeModel.findByIdAndDelete(id).exec();
     if (!result) {

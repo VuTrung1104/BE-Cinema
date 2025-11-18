@@ -33,8 +33,8 @@ export class AuthService {
 
     await user.save();
 
-    // Generate token
-    const accessToken = this.generateToken(user);
+    // Generate tokens
+    const tokens = this.generateToken(user);
 
     return {
       user: {
@@ -43,7 +43,7 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
       },
-      accessToken,
+      ...tokens,
     };
   }
 
@@ -69,8 +69,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Generate token
-    const accessToken = this.generateToken(user);
+    // Generate tokens
+    const tokens = this.generateToken(user);
 
     return {
       user: {
@@ -79,7 +79,7 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
       },
-      accessToken,
+      ...tokens,
     };
   }
 
@@ -126,13 +126,23 @@ export class AuthService {
     };
   }
 
-  private generateToken(user: UserDocument): string {
+  private generateToken(user: UserDocument) {
     const payload = {
       sub: user._id.toString(),
       email: user.email,
       role: user.role,
     };
 
-    return this.jwtService.sign(payload);
+    const accessToken = this.jwtService.sign(payload, {
+      secret: process.env.JWT_SECRET,
+      expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+    });
+
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: process.env.JWT_REFRESH_SECRET,
+      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+    });
+
+    return { accessToken, refreshToken };
   }
 }
