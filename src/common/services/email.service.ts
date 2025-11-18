@@ -20,6 +20,43 @@ export class EmailService {
     });
   }
 
+  /**
+   * Helper method to delay execution (for retry logic)
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Send email with retry logic
+   * @param mailOptions - Email options
+   * @param maxRetries - Maximum number of retry attempts
+   * @returns true if email sent successfully
+   */
+  private async sendEmailWithRetry(mailOptions: any, maxRetries: number = 3): Promise<boolean> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.transporter.sendMail(mailOptions);
+        this.logger.log(`Email sent successfully to ${mailOptions.to} on attempt ${attempt}`);
+        return true;
+      } catch (error) {
+        this.logger.error(`Email send attempt ${attempt}/${maxRetries} failed: ${error.message}`);
+        
+        if (attempt === maxRetries) {
+          this.logger.error(`All ${maxRetries} email send attempts failed for ${mailOptions.to}`);
+          throw new Error(`Failed to send email after ${maxRetries} attempts: ${error.message}`);
+        }
+        
+        // Exponential backoff: 1s, 2s, 4s, etc.
+        const delayMs = 1000 * Math.pow(2, attempt - 1);
+        this.logger.log(`Retrying in ${delayMs}ms...`);
+        await this.delay(delayMs);
+      }
+    }
+    
+    return false;
+  }
+
   async sendOTP(email: string, otp: string, type: string) {
     const subject = type === 'register' 
       ? 'Verify Your Email - BE Cinema'
@@ -71,19 +108,19 @@ export class EmailService {
       </html>
     `;
 
-    try {
-      await this.transporter.sendMail({
-        from: `"BE Cinema" <${this.configService.get<string>('EMAIL_USER')}>`,
-        to: email,
-        subject: subject,
-        html: html,
-      });
+    const mailOptions = {
+      from: `"BE Cinema" <${this.configService.get<string>('EMAIL_USER')}>`,
+      to: email,
+      subject: subject,
+      html: html,
+    };
 
-      this.logger.log(`OTP email sent successfully to ${email}`);
+    try {
+      await this.sendEmailWithRetry(mailOptions, 3);
       return true;
     } catch (error) {
       this.logger.error(`Failed to send OTP email to ${email}:`, error);
-      throw new Error('Failed to send email');
+      throw error;
     }
   }
 
@@ -126,14 +163,15 @@ export class EmailService {
       </html>
     `;
 
-    try {
-      await this.transporter.sendMail({
-        from: `"BE Cinema" <${this.configService.get<string>('EMAIL_USER')}>`,
-        to: email,
-        subject: 'Account Locked - BE Cinema',
-        html: html,
-      });
+    const mailOptions = {
+      from: `"BE Cinema" <${this.configService.get<string>('EMAIL_USER')}>`,
+      to: email,
+      subject: 'Account Locked - BE Cinema',
+      html: html,
+    };
 
+    try {
+      await this.sendEmailWithRetry(mailOptions, 3);
       this.logger.log(`Account locked notification sent to ${email}`);
       return true;
     } catch (error) {

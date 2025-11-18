@@ -49,19 +49,25 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     userId: string,
     ttlSeconds: number = 600, // 10 minutes default
   ): Promise<boolean> {
-    const pipeline = this.client.pipeline();
+    try {
+      const pipeline = this.client.pipeline();
 
-    for (const seat of seats) {
-      const key = `seat:lock:${showtimeId}:${seat}`;
-      // NX = only set if not exists, EX = expire in seconds
-      pipeline.set(key, userId, 'EX', ttlSeconds, 'NX');
+      for (const seat of seats) {
+        const key = `seat:lock:${showtimeId}:${seat}`;
+        // NX = only set if not exists, EX = expire in seconds
+        pipeline.set(key, userId, 'EX', ttlSeconds, 'NX');
+      }
+
+      const results = await pipeline.exec();
+
+      // Check if all seats were locked successfully
+      // Result format: [Error | null, 'OK' | null][]
+      return results.every((result) => result[1] === 'OK');
+    } catch (error) {
+      this.logger.error(`Redis lockSeats failed: ${error.message}`, error.stack);
+      // Return false to indicate lock failed, allowing graceful degradation
+      return false;
     }
-
-    const results = await pipeline.exec();
-
-    // Check if all seats were locked successfully
-    // Result format: [Error | null, 'OK' | null][]
-    return results.every((result) => result[1] === 'OK');
   }
 
   /**
@@ -74,21 +80,27 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     showtimeId: string,
     seats: string[],
   ): Promise<{ [seat: string]: string | null }> {
-    const pipeline = this.client.pipeline();
+    try {
+      const pipeline = this.client.pipeline();
 
-    for (const seat of seats) {
-      const key = `seat:lock:${showtimeId}:${seat}`;
-      pipeline.get(key);
+      for (const seat of seats) {
+        const key = `seat:lock:${showtimeId}:${seat}`;
+        pipeline.get(key);
+      }
+
+      const results = await pipeline.exec();
+      const lockedSeats: { [seat: string]: string | null } = {};
+
+      seats.forEach((seat, index) => {
+        lockedSeats[seat] = results[index][1] as string | null;
+      });
+
+      return lockedSeats;
+    } catch (error) {
+      this.logger.error(`Redis checkLockedSeats failed: ${error.message}`, error.stack);
+      // Return empty object, assuming no locks if Redis is down
+      return {};
     }
-
-    const results = await pipeline.exec();
-    const lockedSeats: { [seat: string]: string | null } = {};
-
-    seats.forEach((seat, index) => {
-      lockedSeats[seat] = results[index][1] as string | null;
-    });
-
-    return lockedSeats;
   }
 
   /**
@@ -103,20 +115,26 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     seats: string[],
     userId: string,
   ): Promise<number> {
-    let unlockedCount = 0;
+    try {
+      let unlockedCount = 0;
 
-    for (const seat of seats) {
-      const key = `seat:lock:${showtimeId}:${seat}`;
-      const owner = await this.client.get(key);
+      for (const seat of seats) {
+        const key = `seat:lock:${showtimeId}:${seat}`;
+        const owner = await this.client.get(key);
 
-      // Only unlock if the user is the owner
-      if (owner === userId) {
-        await this.client.del(key);
-        unlockedCount++;
+        // Only unlock if the user is the owner
+        if (owner === userId) {
+          await this.client.del(key);
+          unlockedCount++;
+        }
       }
-    }
 
-    return unlockedCount;
+      return unlockedCount;
+    } catch (error) {
+      this.logger.error(`Redis unlockSeats failed: ${error.message}`, error.stack);
+      // Return 0 to indicate no seats were unlocked
+      return 0;
+    }
   }
 
   /**

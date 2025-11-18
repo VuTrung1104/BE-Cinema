@@ -20,12 +20,12 @@ export class BookingsService {
   async create(userId: string, createBookingDto: CreateBookingDto) {
     const { showtimeId, seats } = createBookingDto;
 
-    // Start a database transaction
+    // Start a database transaction for atomicity
     const session = await this.connection.startSession();
     session.startTransaction();
 
     try {
-      // Step 1: Try to lock seats in Redis
+      // Step 1: Try to lock seats in Redis (prevents race conditions)
       const lockAcquired = await this.redisService.lockSeats(
         showtimeId,
         seats,
@@ -44,7 +44,7 @@ export class BookingsService {
       // Step 2: Get showtime details
       const showtime = await this.showtimesService.findOne(showtimeId);
 
-      // Step 3: Check if seats are available in database
+      // Step 3: Check if seats are available in database (double-check)
       const unavailableSeats = seats.filter(seat => 
         showtime.bookedSeats.includes(seat)
       );
@@ -63,7 +63,7 @@ export class BookingsService {
       // Step 5: Generate unique booking code
       const bookingCode = this.generateBookingCode();
 
-      // Step 6: Create booking (within transaction)
+      // Step 6: Create booking within transaction (not yet committed)
       const booking = new this.bookingModel({
         userId,
         showtimeId,
@@ -75,10 +75,10 @@ export class BookingsService {
 
       await booking.save({ session });
 
-      // Step 7: Book seats in showtime (within transaction)
+      // Step 7: Book seats in showtime within same transaction (not yet committed)
       await this.showtimesService.bookSeats(showtimeId, seats);
 
-      // Commit transaction
+      // CRITICAL: Commit transaction - both booking and seat booking succeed together
       await session.commitTransaction();
       
       this.logger.log(`Booking created successfully: ${bookingCode}`);
@@ -86,17 +86,22 @@ export class BookingsService {
       return booking;
 
     } catch (error) {
-      // Rollback transaction on any error
+      // CRITICAL: Rollback transaction on ANY error
+      // This ensures booking is not saved if seat booking fails
       await session.abortTransaction();
       
-      // Release Redis locks
-      await this.redisService.unlockSeats(showtimeId, seats, userId);
+      // Release Redis locks on failure
+      try {
+        await this.redisService.unlockSeats(showtimeId, seats, userId);
+      } catch (unlockError) {
+        this.logger.error(`Failed to unlock seats on error: ${unlockError.message}`);
+      }
       
       this.logger.error(`Booking creation failed: ${error.message}`);
       throw error;
 
     } finally {
-      // End session
+      // Always end session to free resources
       session.endSession();
     }
   }
