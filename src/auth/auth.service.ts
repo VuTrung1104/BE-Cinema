@@ -1,16 +1,23 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { VerificationCode, VerificationCodeDocument, OTPType } from './schemas/verification-code.schema';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { SendOTPDto } from './dto/send-otp.dto';
+import { VerifyOTPDto } from './dto/verify-otp.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { EmailService } from '../common/services/email.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(VerificationCode.name) private verificationCodeModel: Model<VerificationCodeDocument>,
     private jwtService: JwtService,
+    private emailService: EmailService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -144,5 +151,117 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken };
+  }
+
+  // ==================== OTP SYSTEM ====================
+
+  async sendOTP(sendOTPDto: SendOTPDto) {
+    const { email, type } = sendOTPDto;
+
+    // Check if email exists for forgot password
+    if (type === OTPType.FORGOT_PASSWORD) {
+      const user = await this.userModel.findOne({ email });
+      if (!user) {
+        throw new NotFoundException('Email not found');
+      }
+    }
+
+    // Generate 6-digit OTP
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Set expiration time (10 minutes)
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+    // Create or update verification code
+    await this.verificationCodeModel.findOneAndUpdate(
+      { email, type },
+      { code, expiresAt, isUsed: false },
+      { upsert: true, new: true },
+    );
+
+    // Send email
+    await this.emailService.sendOTP(email, code, type);
+
+    return {
+      message: 'OTP sent successfully',
+      expiresIn: '10 minutes',
+    };
+  }
+
+  async verifyOTP(verifyOTPDto: VerifyOTPDto) {
+    const { email, code } = verifyOTPDto;
+
+    const verificationCode = await this.verificationCodeModel.findOne({
+      email,
+      code,
+      isUsed: false,
+    });
+
+    if (!verificationCode) {
+      throw new BadRequestException('Invalid OTP code');
+    }
+
+    // Check if expired
+    if (new Date() > verificationCode.expiresAt) {
+      throw new BadRequestException('OTP code has expired');
+    }
+
+    // Mark as used
+    verificationCode.isUsed = true;
+    await verificationCode.save();
+
+    return {
+      message: 'OTP verified successfully',
+      verified: true,
+    };
+  }
+
+  // ==================== PASSWORD RESET ====================
+
+  async forgotPassword(email: string) {
+    const user = await this.userModel.findOne({ email });
+    if (!user) {
+      throw new NotFoundException('Email not found');
+    }
+
+    return this.sendOTP({ email, type: OTPType.FORGOT_PASSWORD });
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    const { email, code, newPassword } = resetPasswordDto;
+
+    // Verify OTP first
+    const verificationCode = await this.verificationCodeModel.findOne({
+      email,
+      code,
+      type: OTPType.FORGOT_PASSWORD,
+      isUsed: false,
+    });
+
+    if (!verificationCode) {
+      throw new BadRequestException('Invalid or expired OTP code');
+    }
+
+    if (new Date() > verificationCode.expiresAt) {
+      throw new BadRequestException('OTP code has expired');
+    }
+
+    // Find user and update password
+    const user = await this.userModel.findOne({ email });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    user.password = newPassword;
+    await user.save(); // Will trigger password hashing
+
+    // Mark OTP as used
+    verificationCode.isUsed = true;
+    await verificationCode.save();
+
+    return {
+      message: 'Password reset successfully',
+    };
   }
 }

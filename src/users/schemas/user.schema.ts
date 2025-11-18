@@ -30,6 +30,24 @@ export class User {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  @Prop()
+  avatar: string;
+
+  @Prop({ default: false })
+  isLocked: boolean;
+
+  @Prop()
+  lockUntil: Date;
+
+  @Prop()
+  lockReason: string;
+
+  @Prop({ default: false })
+  isEmailVerified: boolean;
+
+  @Prop({ default: 0 })
+  violationCount: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

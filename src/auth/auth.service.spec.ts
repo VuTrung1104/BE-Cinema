@@ -5,13 +5,17 @@ import { Model } from 'mongoose';
 import { UnauthorizedException, ConflictException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { VerificationCode, VerificationCodeDocument } from './schemas/verification-code.schema';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { EmailService } from '../common/services/email.service';
 
 describe('AuthService', () => {
   let service: AuthService;
   let userModel: Model<UserDocument>;
+  let verificationCodeModel: Model<VerificationCodeDocument>;
   let jwtService: JwtService;
+  let emailService: EmailService;
 
   const mockUser = {
     _id: 'user123',
@@ -38,6 +42,16 @@ describe('AuthService', () => {
   });
   mockUserModel.create = jest.fn();
 
+  const mockVerificationCodeModel = {
+    findOneAndUpdate: jest.fn(),
+    findOne: jest.fn(),
+  };
+
+  const mockEmailService = {
+    sendOTP: jest.fn(),
+    sendAccountLockedNotification: jest.fn(),
+  };
+
   const mockJwtService = {
     sign: jest.fn((payload, options) => {
       // Return different tokens based on expiresIn
@@ -58,15 +72,25 @@ describe('AuthService', () => {
           useValue: mockUserModel,
         },
         {
+          provide: getModelToken(VerificationCode.name),
+          useValue: mockVerificationCodeModel,
+        },
+        {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: EmailService,
+          useValue: mockEmailService,
         },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     userModel = module.get<Model<UserDocument>>(getModelToken(User.name));
+    verificationCodeModel = module.get<Model<VerificationCodeDocument>>(getModelToken(VerificationCode.name));
     jwtService = module.get<JwtService>(JwtService);
+    emailService = module.get<EmailService>(EmailService);
   });
 
   afterEach(() => {

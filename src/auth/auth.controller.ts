@@ -3,6 +3,9 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nes
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { SendOTPDto } from './dto/send-otp.dto';
+import { VerifyOTPDto } from './dto/verify-otp.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GetUser } from './decorators/get-user.decorator';
 
@@ -44,5 +47,45 @@ export class AuthController {
     return {
       message: 'Logout successful. Please remove the token from client storage.',
     };
+  }
+
+  @Post('send-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send OTP code', description: 'Send a 6-digit OTP code to email for verification' })
+  @ApiBody({ type: SendOTPDto })
+  @ApiResponse({ status: 200, description: 'OTP sent successfully' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  async sendOTP(@Body() sendOTPDto: SendOTPDto) {
+    return this.authService.sendOTP(sendOTPDto);
+  }
+
+  @Post('verify-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify OTP code', description: 'Verify the 6-digit OTP code sent to email' })
+  @ApiBody({ type: VerifyOTPDto })
+  @ApiResponse({ status: 200, description: 'OTP verified successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP' })
+  async verifyOTP(@Body() verifyOTPDto: VerifyOTPDto) {
+    return this.authService.verifyOTP(verifyOTPDto);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request password reset', description: 'Send OTP code for password reset' })
+  @ApiBody({ schema: { properties: { email: { type: 'string', format: 'email' } } } })
+  @ApiResponse({ status: 200, description: 'Password reset OTP sent' })
+  @ApiResponse({ status: 404, description: 'Email not found' })
+  async forgotPassword(@Body('email') email: string) {
+    return this.authService.forgotPassword(email);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password with OTP', description: 'Reset password using verified OTP code' })
+  @ApiBody({ type: ResetPasswordDto })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid OTP or validation error' })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(resetPasswordDto);
   }
 }

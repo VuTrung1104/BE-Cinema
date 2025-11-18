@@ -3,10 +3,16 @@ import { getModelToken } from '@nestjs/mongoose';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './schemas/user.schema';
+import { Violation } from './schemas/violation.schema';
+import { EmailService } from '../common/services/email.service';
+import { CloudinaryService } from '../common/services/cloudinary.service';
 
 describe('UsersService', () => {
   let service: UsersService;
   let mockUserModel: any;
+  let mockViolationModel: any;
+  let mockEmailService: any;
+  let mockCloudinaryService: any;
 
   const mockUser = {
     _id: 'user123',
@@ -36,12 +42,39 @@ describe('UsersService', () => {
       save: jest.fn(),
     };
 
+    mockViolationModel = {
+      find: jest.fn(),
+      countDocuments: jest.fn(),
+    };
+
+    mockEmailService = {
+      sendOTP: jest.fn(),
+      sendAccountLockedNotification: jest.fn(),
+    };
+
+    mockCloudinaryService = {
+      uploadImage: jest.fn(),
+      deleteImage: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         {
           provide: getModelToken(User.name),
           useValue: mockUserModel,
+        },
+        {
+          provide: getModelToken(Violation.name),
+          useValue: mockViolationModel,
+        },
+        {
+          provide: EmailService,
+          useValue: mockEmailService,
+        },
+        {
+          provide: CloudinaryService,
+          useValue: mockCloudinaryService,
         },
       ],
     }).compile();
