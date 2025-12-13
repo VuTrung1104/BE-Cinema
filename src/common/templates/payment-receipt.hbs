@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Receipt</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f4f4;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .header {
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+      padding: 30px;
+      text-align: center;
+      color: white;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 600;
+    }
+    .content {
+      padding: 30px;
+    }
+    .success-icon {
+      text-align: center;
+      margin: 20px 0;
+      font-size: 60px;
+    }
+    .receipt-box {
+      background-color: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+      border: 2px solid #28a745;
+    }
+    .receipt-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .receipt-row:last-child {
+      border-bottom: none;
+      font-weight: bold;
+      font-size: 18px;
+      padding-top: 15px;
+    }
+    .receipt-label {
+      color: #555;
+    }
+    .receipt-value {
+      color: #333;
+      text-align: right;
+    }
+    .transaction-id {
+      background: #e7f5ec;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+      margin: 20px 0;
+      border-left: 4px solid #28a745;
+    }
+    .transaction-id p {
+      margin: 5px 0;
+      color: #155724;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 20px;
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>💳 Payment Receipt</h1>
+      <p style="margin: 10px 0 0 0; opacity: 0.9;">Payment Successful</p>
+    </div>
+
+    <div class="content">
+      <div class="success-icon">✅</div>
+      
+      <p style="text-align: center; font-size: 18px; color: #333;">
+        Hi <strong>{{fullName}}</strong>,<br>
+        Your payment has been processed successfully!
+      </p>
+
+      <div class="transaction-id">
+        <p><strong>Transaction ID</strong></p>
+        <p style="font-size: 20px; letter-spacing: 2px;"><strong>{{transactionId}}</strong></p>
+        <p style="font-size: 14px; margin-top: 10px;">{{paymentDate}}</p>
+      </div>
+
+      <div class="receipt-box">
+        <div class="receipt-row">
+          <span class="receipt-label">Booking Code:</span>
+          <span class="receipt-value">{{bookingCode}}</span>
+        </div>
+        <div class="receipt-row">
+          <span class="receipt-label">Movie:</span>
+          <span class="receipt-value">{{movieTitle}}</span>
+        </div>
+        <div class="receipt-row">
+          <span class="receipt-label">Showtime:</span>
+          <span class="receipt-value">{{showtimeDate}} at {{showtimeTime}}</span>
+        </div>
+        <div class="receipt-row">
+          <span class="receipt-label">Seats:</span>
+          <span class="receipt-value">{{seatsString}}</span>
+        </div>
+        <div class="receipt-row">
+          <span class="receipt-label">Payment Method:</span>
+          <span class="receipt-value">{{paymentMethod}}</span>
+        </div>
+        <div class="receipt-row">
+          <span class="receipt-label">Total Amount:</span>
+          <span class="receipt-value" style="color: #28a745;">{{totalPrice}} VND</span>
+        </div>
+      </div>
+
+      <p style="text-align: center; color: #666; font-size: 14px;">
+        This is an automated receipt for your records.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p>Questions? Contact us at <a href="mailto:support@becinema.com" style="color: #28a745; text-decoration: none;">support@becinema.com</a></p>
+      <p style="margin: 10px 0 0 0;">© 2025 BE Cinema. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

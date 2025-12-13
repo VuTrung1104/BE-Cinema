@@ -8,6 +8,9 @@ export enum PaymentMethod {
   DEBIT_CARD = 'debit_card',
   PAYPAL = 'paypal',
   CASH = 'cash',
+  VNPAY = 'vnpay',
+  MOMO = 'momo',
+  ZALOPAY = 'zalopay',
 }
 
 export enum PaymentStatus {

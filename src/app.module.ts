@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './redis/redis.module';
+import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MoviesModule } from './movies/movies.module';
@@ -32,6 +33,9 @@ import { AppService } from './app.service';
     
     // Redis for caching and seat locking
     RedisModule,
+    
+    // Common services (Email, QRCode, etc.)
+    CommonModule,
     
     // Feature modules
     AuthModule,

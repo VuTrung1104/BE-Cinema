@@ -1,15 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Payment, PaymentDocument, PaymentStatus } from './schemas/payment.schema';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateVNPayPaymentDto, VNPayReturnDto, VNPayIPNDto } from './dto/vnpay-payment.dto';
 import { BookingsService } from '../bookings/bookings.service';
+import { VNPayService } from './services/vnpay.service';
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     private bookingsService: BookingsService,
+    private vnpayService: VNPayService,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto) {
@@ -135,5 +140,194 @@ export class PaymentsService {
     const timestamp = Date.now().toString(36);
     const randomStr = Math.random().toString(36).substring(2, 10);
     return `TXN-${timestamp}-${randomStr}`.toUpperCase();
+  }
+
+  // ============ VNPay Integration Methods ============
+
+  /**
+   * Create VNPay payment and return payment URL
+   */
+  async createVNPayPayment(
+    createVNPayPaymentDto: CreateVNPayPaymentDto,
+    ipAddr: string,
+  ) {
+    const { bookingId, amount, bankCode, locale } = createVNPayPaymentDto;
+
+    // Verify booking exists and is pending
+    const booking = await this.bookingsService.findOne(bookingId);
+    if (booking.status !== 'pending') {
+      throw new BadRequestException('Booking is not in pending status');
+    }
+
+    // Check if payment already exists for this booking
+    const existingPayment = await this.paymentModel.findOne({
+      bookingId,
+      status: { $in: [PaymentStatus.PENDING, PaymentStatus.COMPLETED] },
+    });
+
+    if (existingPayment) {
+      if (existingPayment.status === PaymentStatus.COMPLETED) {
+        throw new BadRequestException('Payment already completed for this booking');
+      }
+      // If pending, we can create a new payment URL
+    }
+
+    // Create payment record
+    const transactionId = this.generateTransactionId();
+    const payment = new this.paymentModel({
+      bookingId,
+      amount,
+      method: 'vnpay',
+      transactionId,
+      status: PaymentStatus.PENDING,
+    });
+    await payment.save();
+
+    // Generate VNPay payment URL
+    const paymentUrl = this.vnpayService.createPaymentUrl(
+      { bookingId, amount, bankCode, locale },
+      ipAddr,
+    );
+
+    this.logger.log(`Created VNPay payment for booking ${bookingId}`);
+
+    return {
+      paymentId: payment._id,
+      paymentUrl,
+      transactionId,
+      amount,
+    };
+  }
+
+  /**
+   * Handle VNPay return callback (user redirected here after payment)
+   */
+  async handleVNPayReturn(vnpParams: VNPayReturnDto) {
+    const verifyResult = this.vnpayService.verifyReturnUrl(vnpParams);
+
+    if (!verifyResult.isValid) {
+      this.logger.error('Invalid VNPay signature on return');
+      return {
+        success: false,
+        message: 'Invalid payment signature',
+      };
+    }
+
+    const orderId = vnpParams.vnp_TxnRef; // Format: {bookingId}-{timestamp}
+    const bookingId = orderId.split('-')[0];
+
+    if (verifyResult.data && vnpParams.vnp_ResponseCode === '00') {
+      // Payment successful
+      await this.completeVNPayPayment(bookingId, verifyResult.data);
+
+      return {
+        success: true,
+        message: 'Payment successful',
+        bookingId,
+        data: verifyResult.data,
+      };
+    } else {
+      // Payment failed
+      await this.failVNPayPayment(bookingId, vnpParams.vnp_ResponseCode);
+
+      return {
+        success: false,
+        message: verifyResult.message,
+        bookingId,
+      };
+    }
+  }
+
+  /**
+   * Handle VNPay IPN (Instant Payment Notification)
+   * This is called by VNPay server to confirm payment
+   */
+  async handleVNPayIPN(vnpParams: VNPayIPNDto) {
+    const verifyResult = this.vnpayService.verifyReturnUrl(vnpParams);
+
+    if (!verifyResult.isValid) {
+      this.logger.error('Invalid VNPay signature on IPN');
+      return {
+        success: false,
+        message: 'Invalid signature',
+      };
+    }
+
+    const orderId = vnpParams.vnp_TxnRef;
+    const bookingId = orderId.split('-')[0];
+
+    // Check if payment already processed
+    const payment = await this.paymentModel.findOne({
+      bookingId,
+      status: PaymentStatus.COMPLETED,
+    });
+
+    if (payment) {
+      this.logger.log(`Payment already processed for booking ${bookingId}`);
+      return {
+        success: true,
+        message: 'Payment already confirmed',
+      };
+    }
+
+    if (verifyResult.data && vnpParams.vnp_ResponseCode === '00') {
+      // Payment successful
+      await this.completeVNPayPayment(bookingId, verifyResult.data);
+
+      return {
+        success: true,
+        message: 'Payment confirmed',
+      };
+    } else {
+      // Payment failed
+      await this.failVNPayPayment(bookingId, vnpParams.vnp_ResponseCode);
+
+      return {
+        success: false,
+        message: verifyResult.message,
+      };
+    }
+  }
+
+  /**
+   * Complete VNPay payment (mark as completed and confirm booking)
+   */
+  private async completeVNPayPayment(bookingId: string, vnpData: any) {
+    // Update payment status
+    const payment = await this.paymentModel.findOne({
+      bookingId,
+      status: PaymentStatus.PENDING,
+    });
+
+    if (payment) {
+      payment.status = PaymentStatus.COMPLETED;
+      payment.paidAt = new Date();
+      payment.transactionId = vnpData.transactionNo || payment.transactionId;
+      await payment.save();
+
+      // Confirm booking
+      await this.bookingsService.confirmBooking(bookingId);
+
+      this.logger.log(`VNPay payment completed for booking ${bookingId}`);
+    }
+  }
+
+  /**
+   * Mark VNPay payment as failed
+   */
+  private async failVNPayPayment(bookingId: string, responseCode: string) {
+    const payment = await this.paymentModel.findOne({
+      bookingId,
+      status: PaymentStatus.PENDING,
+    });
+
+    if (payment) {
+      payment.status = PaymentStatus.FAILED;
+      await payment.save();
+
+      this.logger.warn(
+        `VNPay payment failed for booking ${bookingId}, code: ${responseCode}`,
+      );
+    }
   }
 }

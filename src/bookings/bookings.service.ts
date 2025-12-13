@@ -5,6 +5,8 @@ import { Booking, BookingDocument, BookingStatus } from './schemas/booking.schem
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { ShowtimesService } from '../showtimes/showtimes.service';
 import { RedisService } from '../redis/redis.service';
+import { QRCodeService } from '../common/services/qrcode.service';
+import { EmailService } from '../common/services/email.service';
 
 @Injectable()
 export class BookingsService {
@@ -15,6 +17,8 @@ export class BookingsService {
     @InjectConnection() private connection: Connection,
     private showtimesService: ShowtimesService,
     private redisService: RedisService,
+    private qrcodeService: QRCodeService,
+    private emailService: EmailService,
   ) {}
 
   async create(userId: string, createBookingDto: CreateBookingDto) {
@@ -160,7 +164,16 @@ export class BookingsService {
   }
 
   async confirmBooking(id: string) {
-    const booking = await this.bookingModel.findById(id);
+    const booking = await this.bookingModel.findById(id)
+      .populate({
+        path: 'showtimeId',
+        populate: [
+          { path: 'movieId' },
+          { path: 'theaterId' }
+        ]
+      })
+      .populate('userId')
+      .exec();
     
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${id} not found`);
@@ -180,7 +193,51 @@ export class BookingsService {
       booking.userId.toString(),
     );
 
-    this.logger.log(`Booking confirmed and locks released: ${booking.bookingCode}`);
+    // Generate QR code for booking
+    try {
+      const qrCodeData = {
+        bookingId: booking._id.toString(),
+        bookingCode: booking.bookingCode,
+        userId: booking.userId._id.toString(),
+        showtimeId: booking.showtimeId._id.toString(),
+        seats: booking.seats,
+        totalPrice: booking.totalPrice,
+        timestamp: Date.now(),
+      };
+
+      const qrCodeUrl = await this.qrcodeService.generateQRCodeDataURL(qrCodeData);
+
+      // Send booking confirmation email with QR code
+      const showtime = booking.showtimeId as any;
+      const movie = showtime.movieId as any;
+      const theater = showtime.theaterId as any;
+      const user = booking.userId as any;
+
+      await this.emailService.sendBookingConfirmation({
+        email: user.email,
+        fullName: user.fullName,
+        bookingCode: booking.bookingCode,
+        qrCodeUrl,
+        movieTitle: movie.title,
+        movieDuration: movie.duration,
+        movieGenre: Array.isArray(movie.genre) ? movie.genre.join(', ') : movie.genre,
+        theaterName: theater.name,
+        theaterLocation: theater.location || theater.address || 'N/A',
+        screenName: showtime.screenName || 'Main Screen',
+        showtimeDate: new Date(showtime.startTime).toLocaleDateString('vi-VN'),
+        showtimeTime: new Date(showtime.startTime).toLocaleTimeString('vi-VN', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        seats: booking.seats,
+        totalPrice: booking.totalPrice,
+      });
+
+      this.logger.log(`Booking confirmed, QR code generated, and email sent: ${booking.bookingCode}`);
+    } catch (error) {
+      this.logger.error(`Failed to send booking confirmation email: ${error.message}`);
+      // Don't fail the booking confirmation if email fails
+    }
 
     return booking;
   }
@@ -266,5 +323,102 @@ export class BookingsService {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return code;
+  }
+
+  /**
+   * Verify QR code scanned at cinema
+   */
+  async verifyQRCode(qrData: string) {
+    const result = this.qrcodeService.verifyQRCode(qrData);
+
+    if (!result.valid) {
+      return {
+        valid: false,
+        error: result.error,
+      };
+    }
+
+    // Check if booking exists and is confirmed
+    const booking = await this.bookingModel
+      .findById(result.data.bookingId)
+      .populate({
+        path: 'showtimeId',
+        populate: [{ path: 'movieId' }, { path: 'theaterId' }],
+      })
+      .populate('userId')
+      .exec();
+
+    if (!booking) {
+      return {
+        valid: false,
+        error: 'Booking not found',
+      };
+    }
+
+    if (booking.bookingCode !== result.data.bookingCode) {
+      return {
+        valid: false,
+        error: 'Booking code mismatch',
+      };
+    }
+
+    if (booking.status !== BookingStatus.CONFIRMED) {
+      return {
+        valid: false,
+        error: `Booking status is ${booking.status}, must be confirmed`,
+      };
+    }
+
+    // Check if showtime has already passed
+    const showtime = booking.showtimeId as any;
+    if (new Date(showtime.startTime) < new Date()) {
+      return {
+        valid: false,
+        error: 'Showtime has already passed',
+      };
+    }
+
+    this.logger.log(`QR code verified successfully for booking ${booking.bookingCode}`);
+
+    return {
+      valid: true,
+      booking: {
+        bookingCode: booking.bookingCode,
+        movieTitle: showtime.movieId.title,
+        theaterName: showtime.theaterId.name,
+        startTime: showtime.startTime,
+        seats: booking.seats,
+        totalPrice: booking.totalPrice,
+        userName: booking.userId.fullName,
+      },
+    };
+  }
+
+  /**
+   * Generate QR code for existing booking
+   */
+  async generateBookingQRCode(id: string) {
+    const booking = await this.findOne(id);
+
+    if (booking.status !== BookingStatus.CONFIRMED) {
+      throw new BadRequestException('Can only generate QR code for confirmed bookings');
+    }
+
+    const qrCodeData = {
+      bookingId: booking._id.toString(),
+      bookingCode: booking.bookingCode,
+      userId: booking.userId.toString(),
+      showtimeId: booking.showtimeId.toString(),
+      seats: booking.seats,
+      totalPrice: booking.totalPrice,
+      timestamp: Date.now(),
+    };
+
+    const qrCodeUrl = await this.qrcodeService.generateQRCodeDataURL(qrCodeData);
+
+    return {
+      bookingCode: booking.bookingCode,
+      qrCodeUrl,
+    };
   }
 }

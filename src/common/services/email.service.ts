@@ -179,4 +179,95 @@ export class EmailService {
       return false;
     }
   }
+
+  /**
+   * Send booking confirmation email with QR code
+   */
+  async sendBookingConfirmation(bookingData: {
+    email: string;
+    fullName: string;
+    bookingCode: string;
+    qrCodeUrl: string;
+    movieTitle: string;
+    movieDuration: number;
+    movieGenre: string;
+    theaterName: string;
+    theaterLocation: string;
+    screenName: string;
+    showtimeDate: string;
+    showtimeTime: string;
+    seats: string[];
+    totalPrice: number;
+  }) {
+    const fs = require('fs');
+    const path = require('path');
+    const handlebars = require('handlebars');
+
+    // Load template
+    const templatePath = path.join(__dirname, '../templates/booking-confirmation.hbs');
+    const templateSource = fs.readFileSync(templatePath, 'utf8');
+    const template = handlebars.compile(templateSource);
+    
+    const html = template(bookingData);
+
+    const mailOptions = {
+      from: `"BE Cinema" <${this.configService.get<string>('EMAIL_USER')}>`,
+      to: bookingData.email,
+      subject: `Booking Confirmed - ${bookingData.bookingCode}`,
+      html: html,
+    };
+
+    try {
+      await this.sendEmailWithRetry(mailOptions, 3);
+      this.logger.log(`Booking confirmation sent to ${bookingData.email}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to send booking confirmation to ${bookingData.email}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send payment receipt email
+   */
+  async sendPaymentReceipt(paymentData: {
+    email: string;
+    fullName: string;
+    transactionId: string;
+    paymentDate: string;
+    bookingCode: string;
+    movieTitle: string;
+    showtimeDate: string;
+    showtimeTime: string;
+    seatsString: string;
+    paymentMethod: string;
+    totalPrice: number;
+  }) {
+    const fs = require('fs');
+    const path = require('path');
+    const handlebars = require('handlebars');
+
+    // Load template
+    const templatePath = path.join(__dirname, '../templates/payment-receipt.hbs');
+    const templateSource = fs.readFileSync(templatePath, 'utf8');
+    const template = handlebars.compile(templateSource);
+    
+    const html = template(paymentData);
+
+    const mailOptions = {
+      from: `"BE Cinema" <${this.configService.get<string>('EMAIL_USER')}>`,
+      to: paymentData.email,
+      subject: `Payment Receipt - ${paymentData.transactionId}`,
+      html: html,
+    };
+
+    try {
+      await this.sendEmailWithRetry(mailOptions, 3);
+      this.logger.log(`Payment receipt sent to ${paymentData.email}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to send payment receipt to ${paymentData.email}:`, error);
+      return false;
+    }
+  }
 }

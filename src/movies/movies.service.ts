@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Movie, MovieDocument } from './schemas/movie.schema';
 import { CreateMovieDto } from './dto/create-movie.dto';
+import { PaginationDto, createPaginatedResult } from '../common/dto/pagination.dto';
 
 @Injectable()
 export class MoviesService {
@@ -15,7 +16,10 @@ export class MoviesService {
     return movie.save();
   }
 
-  async findAll(filters?: { genre?: string; isNowShowing?: boolean }) {
+  async findAll(
+    filters?: { genre?: string; isNowShowing?: boolean; search?: string },
+    paginationDto?: PaginationDto,
+  ) {
     const query: any = {};
     
     if (filters?.genre) {
@@ -26,7 +30,29 @@ export class MoviesService {
       query.isNowShowing = filters.isNowShowing;
     }
 
-    return this.movieModel.find(query).exec();
+    // Add search functionality
+    if (filters?.search) {
+      query.$or = [
+        { title: { $regex: filters.search, $options: 'i' } },
+        { description: { $regex: filters.search, $options: 'i' } },
+        { director: { $regex: filters.search, $options: 'i' } },
+      ];
+    }
+
+    // If no pagination, return all results
+    if (!paginationDto) {
+      return this.movieModel.find(query).sort({ releaseDate: -1 }).exec();
+    }
+
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.movieModel.find(query).sort({ releaseDate: -1 }).skip(skip).limit(limit).exec(),
+      this.movieModel.countDocuments(query).exec(),
+    ]);
+
+    return createPaginatedResult(data, total, page, limit);
   }
 
   async findOne(id: string) {

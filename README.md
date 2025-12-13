@@ -1,98 +1,278 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+﻿# Movie Booking API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API RESTful cho ứng dụng đặt vé xem phim được xây dựng bằng NestJS, MongoDB, và JWT Authentication.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 🚀 Công nghệ sử dụng
 
-## Description
+- **Framework**: NestJS
+- **Database**: MongoDB với Mongoose
+- **Authentication**: JWT (JSON Web Tokens)
+- **Validation**: class-validator & class-transformer
+- **Configuration**: @nestjs/config
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 📁 Cấu trúc dự án
 
-## Project setup
-
-```bash
-$ npm install
+```
+movie-booking-api/
+├── src/
+│   ├── auth/                    # Xác thực JWT & Passport
+│   │   ├── decorators/          # Custom decorators (@GetUser, @Roles)
+│   │   ├── dto/                 # DTOs cho authentication
+│   │   ├── guards/              # Guards (JWT, Roles)
+│   │   ├── strategies/          # Passport strategies
+│   │   ├── auth.controller.ts
+│   │   ├── auth.service.ts
+│   │   └── auth.module.ts
+│   ├── users/                   # Quản lý người dùng
+│   │   ├── dto/
+│   │   ├── schemas/
+│   │   ├── users.controller.ts
+│   │   ├── users.service.ts
+│   │   └── users.module.ts
+│   ├── movies/                  # Quản lý phim
+│   │   ├── dto/
+│   │   ├── schemas/
+│   │   ├── movies.controller.ts
+│   │   ├── movies.service.ts
+│   │   └── movies.module.ts
+│   ├── theaters/                # Quản lý rạp chiếu
+│   │   ├── dto/
+│   │   ├── schemas/
+│   │   ├── theaters.controller.ts
+│   │   ├── theaters.service.ts
+│   │   └── theaters.module.ts
+│   ├── showtimes/               # Quản lý suất chiếu
+│   │   ├── dto/
+│   │   ├── schemas/
+│   │   ├── showtimes.controller.ts
+│   │   ├── showtimes.service.ts
+│   │   └── showtimes.module.ts
+│   ├── bookings/                # Quản lý đặt vé
+│   │   ├── dto/
+│   │   ├── schemas/
+│   │   ├── bookings.controller.ts
+│   │   ├── bookings.service.ts
+│   │   └── bookings.module.ts
+│   ├── payments/                # Quản lý thanh toán
+│   │   ├── dto/
+│   │   ├── schemas/
+│   │   ├── payments.controller.ts
+│   │   ├── payments.service.ts
+│   │   └── payments.module.ts
+│   ├── database/                # Database configuration
+│   │   └── database.module.ts
+│   ├── app.module.ts            # Root module
+│   ├── app.controller.ts
+│   ├── app.service.ts
+│   └── main.ts                  # Entry point
+├── .env                         # Environment variables
+├── .env.example                 # Environment template
+├── package.json
+├── tsconfig.json
+└── nest-cli.json
 ```
 
-## Compile and run the project
+## 🛠️ Cài đặt
+
+### 1. Clone repository
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+cd movie-booking-api
 ```
 
-## Run tests
+### 2. Cài đặt dependencies
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm install
 ```
 
-## Deployment
+### 3. Cấu hình môi trường
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Sao chép file `.env.example` thành `.env` và cấu hình:
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+```env
+DATABASE_URL=mongodb://localhost:27017/movie-booking
+JWT_SECRET=your-secret-key-change-this-in-production
+JWT_EXPIRES_IN=7d
+PORT=3000
+NODE_ENV=development
+```
+
+### 4. Khởi động MongoDB
+
+Đảm bảo MongoDB đang chạy:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Windows
+net start MongoDB
+
+# Mac/Linux
+sudo systemctl start mongod
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### 5. Chạy ứng dụng
 
-## Resources
+```bash
+# Development mode
+npm run start:dev
 
-Check out a few resources that may come in handy when working with NestJS:
+# Production mode
+npm run build
+npm run start:prod
+```
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Ứng dụng sẽ chạy tại: `http://localhost:3000`
 
-## Support
+## 📚 API Endpoints
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### Authentication
 
-## Stay in touch
+- `POST /api/v1/auth/register` - Đăng ký tài khoản mới
+- `POST /api/v1/auth/login` - Đăng nhập
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### Users
 
-## License
+- `GET /api/v1/users` - Lấy danh sách users (Admin only)
+- `GET /api/v1/users/me` - Lấy thông tin user hiện tại
+- `GET /api/v1/users/:id` - Lấy thông tin user theo ID (Admin only)
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### Movies
+
+- `GET /api/v1/movies` - Lấy danh sách phim
+- `GET /api/v1/movies/:id` - Lấy chi tiết phim
+- `POST /api/v1/movies` - Tạo phim mới (Admin only)
+- `PATCH /api/v1/movies/:id` - Cập nhật phim (Admin only)
+- `DELETE /api/v1/movies/:id` - Xóa phim (Admin only)
+
+### Theaters
+
+- `GET /api/v1/theaters` - Lấy danh sách rạp
+- `GET /api/v1/theaters/:id` - Lấy chi tiết rạp
+- `POST /api/v1/theaters` - Tạo rạp mới (Admin only)
+- `PATCH /api/v1/theaters/:id` - Cập nhật rạp (Admin only)
+- `DELETE /api/v1/theaters/:id` - Xóa rạp (Admin only)
+
+### Showtimes
+
+- `GET /api/v1/showtimes` - Lấy danh sách suất chiếu
+- `GET /api/v1/showtimes/:id` - Lấy chi tiết suất chiếu
+- `GET /api/v1/showtimes/:id/seats` - Lấy thông tin ghế trống
+- `POST /api/v1/showtimes` - Tạo suất chiếu mới (Admin only)
+- `DELETE /api/v1/showtimes/:id` - Xóa suất chiếu (Admin only)
+
+### Bookings
+
+- `GET /api/v1/bookings` - Lấy danh sách đặt vé
+- `GET /api/v1/bookings/:id` - Lấy chi tiết đặt vé
+- `GET /api/v1/bookings/code/:code` - Tìm đặt vé theo mã
+- `POST /api/v1/bookings` - Đặt vé mới
+- `PATCH /api/v1/bookings/:id/confirm` - Xác nhận đặt vé (Admin only)
+- `PATCH /api/v1/bookings/:id/cancel` - Hủy đặt vé
+
+### Payments
+
+- `GET /api/v1/payments` - Lấy danh sách thanh toán (Admin only)
+- `GET /api/v1/payments/:id` - Lấy chi tiết thanh toán
+- `POST /api/v1/payments` - Tạo thanh toán mới
+- `POST /api/v1/payments/:id/process` - Xử lý thanh toán
+- `PATCH /api/v1/payments/:id/refund` - Hoàn tiền (Admin only)
+
+## 🔐 Authentication
+
+API sử dụng JWT Bearer token. Sau khi đăng nhập, sử dụng token trong header:
+
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+## 👥 User Roles
+
+- **admin**: Toàn quyền quản lý
+- **user**: Người dùng thông thường (đặt vé, xem thông tin)
+
+## 📝 Ví dụ sử dụng
+
+### 1. Đăng ký tài khoản
+
+```bash
+POST /api/v1/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "password123",
+  "fullName": "John Doe",
+  "phone": "0123456789"
+}
+```
+
+### 2. Đăng nhập
+
+```bash
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+
+### 3. Tạo phim mới (Admin)
+
+```bash
+POST /api/v1/movies
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "title": "The Matrix",
+  "description": "A computer hacker learns about the true nature of reality",
+  "genres": ["sci-fi", "action"],
+  "duration": 136,
+  "releaseDate": "1999-03-31",
+  "director": "The Wachowskis",
+  "cast": ["Keanu Reeves", "Laurence Fishburne"],
+  "rating": 8.7
+}
+```
+
+### 4. Đặt vé
+
+```bash
+POST /api/v1/bookings
+Authorization: Bearer <user-token>
+Content-Type: application/json
+
+{
+  "showtimeId": "507f1f77bcf86cd799439011",
+  "seats": ["A1", "A2", "A3"]
+}
+```
+
+## 🧪 Testing
+
+```bash
+# Unit tests
+npm run test
+
+# E2E tests
+npm run test:e2e
+
+# Test coverage
+npm run test:cov
+```
+
+## 📦 Build
+
+```bash
+npm run build
+```
+
+## 🚀 Deployment
+
+1. Cấu hình biến môi trường production
+2. Build ứng dụng: `npm run build`
+3. Chạy: `npm run start:prod`
+
+
