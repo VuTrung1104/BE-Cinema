@@ -18,7 +18,8 @@ export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a payment record' })\n  @ApiResponse({ status: 201, description: 'Payment created successfully' })
+  @ApiOperation({ summary: 'Create a payment record' })
+  @ApiResponse({ status: 201, description: 'Payment created successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
   create(@Body() createPaymentDto: CreatePaymentDto) {
     return this.paymentsService.create(createPaymentDto);
