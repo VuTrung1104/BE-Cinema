@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { RedisModule as NestRedisModule } from '@nestjs-modules/ioredis';
 import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './redis/redis.module';
 import { CommonModule } from './common/common.module';
@@ -30,6 +31,18 @@ import { AppService } from './app.service';
     
     // Database connection
     DatabaseModule,
+    
+    // Redis connection for health check
+    NestRedisModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        type: 'single',
+        options: {
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+        },
+      }),
+    }),
     
     // Redis for caching and seat locking
     RedisModule,

@@ -52,8 +52,8 @@ export class User {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-// Index for faster email lookups
-UserSchema.index({ email: 1 });
+// Note: Email index is already created via @Prop({ unique: true }) decorator
+// No need for additional index declaration to avoid duplicate index warning
 
 // Hash password before saving
 UserSchema.pre('save', async function (next) {
