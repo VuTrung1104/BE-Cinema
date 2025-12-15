@@ -380,6 +380,7 @@ export class BookingsService {
 
     this.logger.log(`QR code verified successfully for booking ${booking.bookingCode}`);
 
+    const user = booking.userId as any;
     return {
       valid: true,
       booking: {
@@ -389,7 +390,7 @@ export class BookingsService {
         startTime: showtime.startTime,
         seats: booking.seats,
         totalPrice: booking.totalPrice,
-        userName: booking.userId.fullName,
+        userName: user.fullName,
       },
     };
   }
