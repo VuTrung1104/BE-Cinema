@@ -24,7 +24,7 @@ http://localhost:3000/api/docs
 3. **Movies** - Quản lý phim (CRUD, pagination, search)
 4. **Theaters** - Quản lý rạp chiếu
 5. **Showtimes** - Quản lý suất chiếu
-6. **Bookings** - Đặt vé với seat locking (Redis)
+6. **Bookings** - Đặt vé với seat locking (MongoDB atomic operations)
 7. **Payments** - Thanh toán VNPay, QR code, email confirmation
 
 ---
@@ -328,8 +328,8 @@ const createBooking = async (data: {
 };
 
 // LƯU Ý: 
-// - Ghế sẽ được lock trong Redis trong 10 phút
-// - Nếu không thanh toán trong 10 phút, booking sẽ bị hủy tự động
+// - Ghế sẽ được lock trong MongoDB trong 10 phút (TTL automatic cleanup)
+// - Nếu không thanh toán trong 10 phút, lock sẽ tự động hết hạn
 // - Frontend nên hiển thị countdown timer
 ```
 
@@ -369,7 +369,7 @@ const handlePaymentReturn = () => {
     // Thanh toán thành công
     // Backend đã tự động:
     // 1. Confirm booking (status: CONFIRMED)
-    // 2. Release seats từ Redis
+    // 2. Release seat locks từ MongoDB
     // 3. Gửi email xác nhận kèm QR code
     
     // Frontend hiển thị thông báo thành công
@@ -541,8 +541,9 @@ try {
 - Backend có rate limiting: **10 requests/60s** cho tất cả endpoints
 - Frontend nên debounce các request (ví dụ: search input)
 
-### Redis Seat Locking
-- Ghế sẽ được lock trong **10 phút** khi user tạo booking
+### MongoDB Seat Locking
+- Ghế sẽ được lock trong **10 phút** khi user tạo booking (atomic operations)
+- Lock tự động expire khi hết thời gian (TTL)
 - Frontend nên:
   1. Hiển thị countdown timer (10 phút)
   2. Cảnh báo khi còn < 2 phút
@@ -668,7 +669,7 @@ Nếu có vấn đề với API, check:
 - ✅ VNPay Payment Gateway
 - ✅ QR Code generation
 - ✅ Email notifications
-- ✅ Redis seat locking
+- ✅ MongoDB seat locking (atomic operations + TTL)
 - ✅ Error handling chuẩn
 - ✅ CORS configured
 

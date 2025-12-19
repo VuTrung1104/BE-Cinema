@@ -1,12 +1,12 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, ConflictException } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
-import { Model, Connection } from 'mongoose';
+import { Model, Connection, Types } from 'mongoose';
 import { Booking, BookingDocument, BookingStatus } from './schemas/booking.schema';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { ShowtimesService } from '../showtimes/showtimes.service';
-import { RedisService } from '../redis/redis.service';
 import { QRCodeService } from '../common/services/qrcode.service';
 import { EmailService } from '../common/services/email.service';
+import { Showtime, ShowtimeDocument } from '../showtimes/schemas/showtime.schema';
 
 @Injectable()
 export class BookingsService {
@@ -14,12 +14,127 @@ export class BookingsService {
 
   constructor(
     @InjectModel(Booking.name) private bookingModel: Model<BookingDocument>,
+    @InjectModel(Showtime.name) private showtimeModel: Model<ShowtimeDocument>,
     @InjectConnection() private connection: Connection,
     private showtimesService: ShowtimesService,
-    private redisService: RedisService,
     private qrcodeService: QRCodeService,
     private emailService: EmailService,
   ) {}
+
+  /**
+   * Lock seats temporarily using MongoDB (replaces Redis)
+   * Uses atomic operation to prevent race conditions
+   */
+  private async lockSeatsInDB(
+    showtimeId: string,
+    seats: string[],
+    userId: string,
+    ttlMinutes: number = 10,
+  ): Promise<boolean> {
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
+    const now = new Date();
+
+    try {
+      // First, remove expired locks
+      await this.showtimeModel.updateOne(
+        { _id: showtimeId },
+        {
+          $pull: {
+            tempLockedSeats: { expiresAt: { $lt: now } },
+          },
+        },
+      );
+
+      // Prepare new locks
+      const newLocks = seats.map((seat) => ({
+        seat,
+        userId: new Types.ObjectId(userId),
+        expiresAt,
+      }));
+
+      // Atomic operation: Lock seats only if they are not already locked or booked
+      const result = await this.showtimeModel.updateOne(
+        {
+          _id: showtimeId,
+          // Check seats are not booked
+          bookedSeats: { $nin: seats },
+          // Check seats are not temporarily locked by others
+          'tempLockedSeats.seat': { $nin: seats },
+        },
+        {
+          $push: {
+            tempLockedSeats: { $each: newLocks },
+          },
+        },
+      );
+
+      const success = result.modifiedCount > 0;
+      if (success) {
+        this.logger.log(`Seats locked in DB for user ${userId}: ${seats.join(', ')}`);
+      } else {
+        this.logger.warn(`Failed to lock seats for user ${userId}: seats may be taken`);
+      }
+      return success;
+    } catch (error) {
+      this.logger.error(`Error locking seats: ${error.message}`, error.stack);
+      return false;
+    }
+  }
+
+  /**
+   * Unlock seats after booking completion or cancellation
+   */
+  private async unlockSeatsInDB(
+    showtimeId: string,
+    seats: string[],
+    userId: string,
+  ): Promise<void> {
+    try {
+      await this.showtimeModel.updateOne(
+        { _id: showtimeId },
+        {
+          $pull: {
+            tempLockedSeats: {
+              seat: { $in: seats },
+              userId: new Types.ObjectId(userId),
+            },
+          },
+        },
+      );
+      this.logger.log(`Seats unlocked for user ${userId}: ${seats.join(', ')}`);
+    } catch (error) {
+      this.logger.error(`Error unlocking seats: ${error.message}`, error.stack);
+    }
+  }
+
+  /**
+   * Check which seats are currently locked
+   */
+  private async checkLockedSeatsInDB(
+    showtimeId: string,
+    seats: string[],
+  ): Promise<string[]> {
+    const now = new Date();
+    
+    // First remove expired locks
+    await this.showtimeModel.updateOne(
+      { _id: showtimeId },
+      {
+        $pull: {
+          tempLockedSeats: { expiresAt: { $lt: now } },
+        },
+      },
+    );
+
+    const showtime = await this.showtimeModel.findById(showtimeId);
+    if (!showtime) return [];
+
+    const lockedSeats = showtime.tempLockedSeats
+      .filter((lock) => seats.includes(lock.seat) && lock.expiresAt > now)
+      .map((lock) => lock.seat);
+
+    return lockedSeats;
+  }
 
   async create(userId: string, createBookingDto: CreateBookingDto) {
     const { showtimeId, seats } = createBookingDto;
@@ -29,21 +144,19 @@ export class BookingsService {
     session.startTransaction();
 
     try {
-      // Step 1: Try to lock seats in Redis (prevents race conditions)
-      const lockAcquired = await this.redisService.lockSeats(
+      // Step 1: Try to lock seats in MongoDB (prevents race conditions)
+      const lockAcquired = await this.lockSeatsInDB(
         showtimeId,
         seats,
         userId,
-        600, // 10 minutes TTL
+        10, // 10 minutes TTL
       );
 
       if (!lockAcquired) {
-        throw new BadRequestException(
+        throw new ConflictException(
           'One or more seats are currently being reserved by another user. Please try again.',
         );
       }
-
-      this.logger.log(`Seats locked for user ${userId}: ${seats.join(', ')}`);
 
       // Step 2: Get showtime details
       const showtime = await this.showtimesService.findOne(showtimeId);
@@ -55,7 +168,7 @@ export class BookingsService {
 
       if (unavailableSeats.length > 0) {
         // Release locks before throwing error
-        await this.redisService.unlockSeats(showtimeId, seats, userId);
+        await this.unlockSeatsInDB(showtimeId, seats, userId);
         throw new BadRequestException(
           `Seats ${unavailableSeats.join(', ')} are already booked`
         );
@@ -94,9 +207,9 @@ export class BookingsService {
       // This ensures booking is not saved if seat booking fails
       await session.abortTransaction();
       
-      // Release Redis locks on failure
+      // Release MongoDB locks on failure
       try {
-        await this.redisService.unlockSeats(showtimeId, seats, userId);
+        await this.unlockSeatsInDB(showtimeId, seats, userId);
       } catch (unlockError) {
         this.logger.error(`Failed to unlock seats on error: ${unlockError.message}`);
       }
@@ -186,8 +299,8 @@ export class BookingsService {
     booking.status = BookingStatus.CONFIRMED;
     await booking.save();
 
-    // Release Redis locks when booking is confirmed (payment completed)
-    await this.redisService.unlockSeats(
+    // Release MongoDB locks when booking is confirmed (payment completed)
+    await this.unlockSeatsInDB(
       booking.showtimeId.toString(),
       booking.seats,
       booking.userId.toString(),
@@ -259,8 +372,8 @@ export class BookingsService {
       booking.seats,
     );
 
-    // Release Redis locks
-    await this.redisService.unlockSeats(
+    // Release MongoDB locks
+    await this.unlockSeatsInDB(
       booking.showtimeId.toString(),
       booking.seats,
       booking.userId.toString(),
@@ -292,25 +405,48 @@ export class BookingsService {
       throw new BadRequestException('Can only extend pending bookings');
     }
 
-    const extendedCount = await this.redisService.extendSeatLock(
-      booking.showtimeId.toString(),
-      booking.seats,
-      userId,
-      600, // Extend by another 10 minutes
+    // Extend lock by updating expiration time in MongoDB
+    const newExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const result = await this.showtimeModel.updateMany(
+      {
+        _id: booking.showtimeId,
+        'tempLockedSeats.seat': { $in: booking.seats },
+        'tempLockedSeats.userId': new Types.ObjectId(userId),
+      },
+      {
+        $set: {
+          'tempLockedSeats.$[elem].expiresAt': newExpiresAt,
+        },
+      },
+      {
+        arrayFilters: [{ 'elem.userId': new Types.ObjectId(userId) }],
+      },
     );
 
-    this.logger.log(`Extended lock for ${extendedCount} seats`);
+    this.logger.log(`Extended lock for ${result.modifiedCount} seats`);
   }
 
   /**
    * Check remaining time for seat locks
    */
   async checkSeatLockStatus(showtimeId: string, seats: string[]): Promise<any> {
-    const lockedSeats = await this.redisService.checkLockedSeats(showtimeId, seats);
+    const lockedSeats = await this.checkLockedSeatsInDB(showtimeId, seats);
+    const now = new Date();
+    
+    // Get TTL information from MongoDB
+    const showtime = await this.showtimeModel.findById(showtimeId);
     const ttls: { [seat: string]: number } = {};
 
-    for (const seat of seats) {
-      ttls[seat] = await this.redisService.getSeatLockTTL(showtimeId, seat);
+    if (showtime) {
+      for (const seat of seats) {
+        const lock = showtime.tempLockedSeats.find(l => l.seat === seat);
+        if (lock && lock.expiresAt > now) {
+          // Return TTL in seconds
+          ttls[seat] = Math.floor((lock.expiresAt.getTime() - now.getTime()) / 1000);
+        } else {
+          ttls[seat] = -2; // -2 means not locked
+        }
+      }
     }
 
     return { lockedSeats, ttls };
