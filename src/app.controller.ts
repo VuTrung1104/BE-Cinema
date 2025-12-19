@@ -3,8 +3,6 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AppService } from './app.service';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
-import { InjectRedis } from '@nestjs-modules/ioredis';
-import Redis from 'ioredis';
 
 @ApiTags('health')
 @Controller()
@@ -14,7 +12,6 @@ export class AppController {
   constructor(
     private readonly appService: AppService,
     @InjectConnection() private readonly mongoConnection: Connection,
-    @InjectRedis() private readonly redis: Redis,
   ) {
     this.startTime = Date.now();
   }
@@ -52,15 +49,6 @@ export class AppController {
       mongoStatus = 'error';
     }
 
-    // Check Redis connection
-    let redisStatus = 'disconnected';
-    try {
-      await this.redis.ping();
-      redisStatus = 'connected';
-    } catch (error) {
-      redisStatus = 'error';
-    }
-
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
@@ -68,7 +56,6 @@ export class AppController {
       uptime,
       environment: process.env.NODE_ENV || 'development',
       mongodb: mongoStatus,
-      redis: redisStatus,
     };
   }
 }
