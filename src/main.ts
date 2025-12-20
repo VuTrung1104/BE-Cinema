@@ -75,11 +75,12 @@ async function bootstrap() {
   });
   
   const port = configService.get<number>('PORT') || 3000;
+  const logger = new LoggerService();
   
   await app.listen(port);
-  console.log(`🚀 Application is running on: http://localhost:${port}`);
-  console.log(`📚 Swagger documentation: http://localhost:${port}/api/docs`);
-  console.log(`🔗 API endpoints: http://localhost:${port}/api/v1`);
+  logger.log(`Application is running on: http://localhost:${port}`);
+  logger.log(`Swagger documentation: http://localhost:${port}/api/docs`);
+  logger.log(`API endpoints: http://localhost:${port}/api/v1`);
 }
 
 bootstrap();
