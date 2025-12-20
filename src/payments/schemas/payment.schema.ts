@@ -43,7 +43,8 @@ export class Payment {
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
 
-// Indexes
-PaymentSchema.index({ bookingId: 1 });
-PaymentSchema.index({ transactionId: 1 });
-PaymentSchema.index({ status: 1 });
+// Indexes for efficient queries
+PaymentSchema.index({ bookingId: 1 }); // Payment per booking
+PaymentSchema.index({ transactionId: 1 }); // External transaction lookup
+PaymentSchema.index({ status: 1, createdAt: -1 }); // Filter by status with sorting
+PaymentSchema.index({ method: 1, status: 1 }); // Payment method analytics

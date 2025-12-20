@@ -29,5 +29,7 @@ export class Theater {
 
 export const TheaterSchema = SchemaFactory.createForClass(Theater);
 
-// Index for location-based queries
-TheaterSchema.index({ city: 1 });
+// Indexes for efficient queries
+TheaterSchema.index({ name: 'text' }); // Text search for theater names
+TheaterSchema.index({ city: 1, isActive: 1 }); // Location-based queries with active filter
+TheaterSchema.index({ isActive: 1 }); // Filter active theaters

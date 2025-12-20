@@ -52,7 +52,9 @@ export class Movie {
 
 export const MovieSchema = SchemaFactory.createForClass(Movie);
 
-// Indexes
-MovieSchema.index({ title: 'text' });
-MovieSchema.index({ genres: 1 });
-MovieSchema.index({ releaseDate: -1 });
+// Indexes for efficient queries
+MovieSchema.index({ title: 'text', description: 'text' }); // Full text search
+MovieSchema.index({ genres: 1, isNowShowing: 1 }); // Filter by genre and showing status
+MovieSchema.index({ releaseDate: -1, isNowShowing: 1 }); // Sort by release date with filter
+MovieSchema.index({ rating: -1 }); // Sort by rating
+MovieSchema.index({ isNowShowing: 1, releaseDate: -1 }); // Now showing movies sorted

@@ -47,7 +47,8 @@ export class Showtime {
 export const ShowtimeSchema = SchemaFactory.createForClass(Showtime);
 
 // Indexes for efficient queries
-ShowtimeSchema.index({ movieId: 1, startTime: 1 });
-ShowtimeSchema.index({ theaterId: 1, startTime: 1 });
-ShowtimeSchema.index({ startTime: 1 });
-ShowtimeSchema.index({ 'tempLockedSeats.expiresAt': 1 }); // For TTL cleanup
+ShowtimeSchema.index({ movieId: 1, startTime: 1, isActive: 1 }); // Movie schedule
+ShowtimeSchema.index({ theaterId: 1, startTime: 1, isActive: 1 }); // Theater schedule
+ShowtimeSchema.index({ startTime: 1, isActive: 1 }); // Time-based queries
+ShowtimeSchema.index({ 'tempLockedSeats.expiresAt': 1 }); // TTL cleanup for expired locks
+ShowtimeSchema.index({ movieId: 1, theaterId: 1, startTime: 1 }); // Combined search

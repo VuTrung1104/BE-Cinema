@@ -52,8 +52,12 @@ export class User {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
+// Indexes for efficient queries
 // Note: Email index is already created via @Prop({ unique: true }) decorator
-// No need for additional index declaration to avoid duplicate index warning
+UserSchema.index({ role: 1, isActive: 1 }); // Admin queries for user management
+UserSchema.index({ isLocked: 1 }); // Query locked users
+UserSchema.index({ violationCount: -1 }); // Sort by violations
+UserSchema.index({ fullName: 'text', email: 'text' }); // Text search for users
 
 // Hash password before saving
 UserSchema.pre('save', async function (next) {
