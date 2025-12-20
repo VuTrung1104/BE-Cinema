@@ -4,15 +4,19 @@ import { Model, Connection } from 'mongoose';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { BookingsService } from './bookings.service';
 import { Booking, BookingDocument, BookingStatus } from './schemas/booking.schema';
+import { Showtime, ShowtimeDocument } from '../showtimes/schemas/showtime.schema';
 import { ShowtimesService } from '../showtimes/showtimes.service';
-import { RedisService } from '../redis/redis.service';
+import { QRCodeService } from '../common/services/qrcode.service';
+import { EmailService } from '../common/services/email.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
 describe('BookingsService', () => {
   let service: BookingsService;
   let bookingModel: Model<BookingDocument>;
+  let showtimeModel: Model<ShowtimeDocument>;
   let showtimesService: ShowtimesService;
-  let redisService: RedisService;
+  let qrcodeService: QRCodeService;
+  let emailService: EmailService;
   let connection: Connection;
 
   const mockShowtime = {
@@ -52,18 +56,27 @@ describe('BookingsService', () => {
   mockBookingModel.findOne = jest.fn();
   mockBookingModel.findByIdAndUpdate = jest.fn();
 
+  const mockShowtimeModel = {
+    updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    findById: jest.fn().mockResolvedValue({
+      _id: 'showtime123',
+      tempLockedSeats: [],
+      bookedSeats: ['A1', 'A2'],
+    }),
+  } as any;
+
   const mockShowtimesService = {
     findOne: jest.fn(),
     bookSeats: jest.fn(),
     releaseSeats: jest.fn(),
   };
 
-  const mockRedisService = {
-    lockSeats: jest.fn().mockResolvedValue(true),
-    unlockSeats: jest.fn().mockResolvedValue(true),
-    checkLockedSeats: jest.fn().mockResolvedValue([]),
-    extendSeatLock: jest.fn().mockResolvedValue(true),
-    getSeatLockTTL: jest.fn().mockResolvedValue(600),
+  const mockQRCodeService = {
+    generateBookingQRCode: jest.fn().mockResolvedValue('data:image/png;base64,mockqrcode'),
+  };
+
+  const mockEmailService = {
+    sendBookingConfirmation: jest.fn().mockResolvedValue(true),
   };
 
   const mockConnection = {
@@ -84,12 +97,20 @@ describe('BookingsService', () => {
           useValue: mockBookingModel,
         },
         {
+          provide: getModelToken(Showtime.name),
+          useValue: mockShowtimeModel,
+        },
+        {
           provide: ShowtimesService,
           useValue: mockShowtimesService,
         },
         {
-          provide: RedisService,
-          useValue: mockRedisService,
+          provide: QRCodeService,
+          useValue: mockQRCodeService,
+        },
+        {
+          provide: EmailService,
+          useValue: mockEmailService,
         },
         {
           provide: getConnectionToken(),
@@ -100,8 +121,10 @@ describe('BookingsService', () => {
 
     service = module.get<BookingsService>(BookingsService);
     bookingModel = module.get<Model<BookingDocument>>(getModelToken(Booking.name));
+    showtimeModel = module.get<Model<ShowtimeDocument>>(getModelToken(Showtime.name));
     showtimesService = module.get<ShowtimesService>(ShowtimesService);
-    redisService = module.get<RedisService>(RedisService);
+    qrcodeService = module.get<QRCodeService>(QRCodeService);
+    emailService = module.get<EmailService>(EmailService);
     connection = module.get<Connection>(getConnectionToken());
   });
 
@@ -112,43 +135,59 @@ describe('BookingsService', () => {
   describe('create', () => {
     it('should create a booking with available seats', async () => {
       const createBookingDto: CreateBookingDto = {
-        showtimeId: 'showtime123',
+        showtimeId: '507f1f77bcf86cd799439011',
         seats: ['B1', 'B2'],
       };
+
+      // Mock showtime model to return success for locking
+      mockShowtimeModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
+      mockShowtimeModel.findById.mockResolvedValue({
+        _id: '507f1f77bcf86cd799439011',
+        tempLockedSeats: [],
+        bookedSeats: ['A1', 'A2'],
+      });
 
       mockShowtimesService.findOne.mockResolvedValue(mockShowtime);
       mockShowtimesService.bookSeats.mockResolvedValue(true);
 
-      const result = await service.create('user123', createBookingDto);
+      const result = await service.create('507f191e810c19729de860ea', createBookingDto);
 
       expect(result).toBeDefined();
-      expect(mockShowtimesService.findOne).toHaveBeenCalledWith('showtime123');
-      expect(mockShowtimesService.bookSeats).toHaveBeenCalledWith('showtime123', ['B1', 'B2']);
+      expect(mockShowtimesService.findOne).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+      expect(mockShowtimesService.bookSeats).toHaveBeenCalledWith('507f1f77bcf86cd799439011', ['B1', 'B2']);
     });
 
-    it('should throw BadRequestException if seats are not available', async () => {
+    it('should throw ConflictException if seats cannot be locked', async () => {
       const createBookingDto: CreateBookingDto = {
-        showtimeId: 'showtime123',
+        showtimeId: '507f1f77bcf86cd799439011',
         seats: ['A1', 'B1'], // A1 is already booked
       };
 
-      mockShowtimesService.findOne.mockResolvedValue(mockShowtime);
+      // Mock lock failure
+      mockShowtimeModel.updateOne.mockResolvedValue({ modifiedCount: 0 });
 
-      await expect(service.create('user123', createBookingDto)).rejects.toThrow(
-        BadRequestException,
+      await expect(service.create('507f191e810c19729de860ea', createBookingDto)).rejects.toThrow(
+        ConflictException,
       );
     });
 
     it('should calculate correct total price', async () => {
       const createBookingDto: CreateBookingDto = {
-        showtimeId: 'showtime123',
+        showtimeId: '507f1f77bcf86cd799439011',
         seats: ['B1', 'B2', 'B3'],
       };
+
+      mockShowtimeModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
+      mockShowtimeModel.findById.mockResolvedValue({
+        _id: '507f1f77bcf86cd799439011',
+        tempLockedSeats: [],
+        bookedSeats: ['A1', 'A2'],
+      });
 
       mockShowtimesService.findOne.mockResolvedValue(mockShowtime);
       mockShowtimesService.bookSeats.mockResolvedValue(true);
 
-      const result = await service.create('user123', createBookingDto);
+      const result = await service.create('507f191e810c19729de860ea', createBookingDto);
 
       expect(result).toBeDefined();
       expect(result.seats).toEqual(createBookingDto.seats);
@@ -220,10 +259,13 @@ describe('BookingsService', () => {
       const pendingBooking = { 
         ...mockBooking, 
         status: BookingStatus.PENDING,
-        save: jest.fn().mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED })
+        save: jest.fn().mockResolvedValue({ ...mockBooking, status: BookingStatus.CONFIRMED }),
+        populate: jest.fn().mockReturnThis(),
       };
 
-      mockBookingModel.findById.mockResolvedValue(pendingBooking);
+      mockBookingModel.findById.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(pendingBooking),
+      });
 
       const result = await service.confirmBooking('booking123');
 
@@ -236,18 +278,20 @@ describe('BookingsService', () => {
       const bookingToCancel = {
         ...mockBooking,
         status: BookingStatus.PENDING,
-        showtimeId: 'showtime123',
+        showtimeId: '507f1f77bcf86cd799439011',
+        userId: '507f191e810c19729de860ea',
         seats: ['B1', 'B2'],
         save: jest.fn().mockResolvedValue({ 
           ...mockBooking, 
           status: BookingStatus.CANCELLED,
-          showtimeId: 'showtime123',
+          showtimeId: '507f1f77bcf86cd799439011',
           seats: ['B1', 'B2']
         })
       };
 
       mockBookingModel.findById.mockResolvedValue(bookingToCancel);
       mockShowtimesService.releaseSeats.mockResolvedValue(true);
+      mockShowtimeModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
       const result = await service.cancelBooking('booking123');
 

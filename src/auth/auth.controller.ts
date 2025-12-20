@@ -16,23 +16,29 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 3600000 } }) // 10 requests per hour
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register a new user', description: 'Create a new user account with email and password' })
+  @ApiOperation({ summary: 'Register a new user', description: 'Create a new user account with email and password (Rate limit: 10 per hour)' })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 201, description: 'User successfully registered' })
   @ApiResponse({ status: 409, description: 'Email already exists' })
   @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
   @Post('login')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 900000 } }) // 20 requests per 15 minutes
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login user', description: 'Authenticate user and receive JWT access token' })
+  @ApiOperation({ summary: 'Login user', description: 'Authenticate user and receive JWT access token (Rate limit: 20 per 15 minutes)' })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, description: 'Login successful, returns user info and access token' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 429, description: 'Too many requests' })
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
   }

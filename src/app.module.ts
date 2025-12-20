@@ -12,13 +12,15 @@ import { BookingsModule } from './bookings/bookings.module';
 import { PaymentsModule } from './payments/payments.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { validate } from './config/env.validation';
 
 @Module({
   imports: [
-    // ConfigModule setup - Global configuration
+    // ConfigModule setup - Global configuration with validation
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      validate, // Validate environment variables on startup
     }),
 
     // Rate limiting configuration
