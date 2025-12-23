@@ -11,13 +11,24 @@ export class MoviesService {
     @InjectModel(Movie.name) private movieModel: Model<MovieDocument>,
   ) {}
 
+  private generateSlug(title: string): string {
+    return title
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
+  }
+
   async create(createMovieDto: CreateMovieDto) {
-    const movie = new this.movieModel(createMovieDto);
+    const slug = this.generateSlug(createMovieDto.title);
+    const movie = new this.movieModel({ ...createMovieDto, slug });
     return movie.save();
   }
 
   async findAll(
-    filters?: { genre?: string; isNowShowing?: boolean; search?: string },
+    filters?: { genre?: string; status?: string; isNowShowing?: boolean; search?: string },
     paginationDto?: PaginationDto,
   ) {
     const query: any = {};
@@ -26,7 +37,11 @@ export class MoviesService {
       query.genres = filters.genre;
     }
     
-    if (filters?.isNowShowing !== undefined) {
+    // Ưu tiên sử dụng status nếu có
+    if (filters?.status) {
+      query.status = filters.status;
+    } else if (filters?.isNowShowing !== undefined) {
+      // Backward compatibility với isNowShowing
       query.isNowShowing = filters.isNowShowing;
     }
 
@@ -63,9 +78,24 @@ export class MoviesService {
     return movie;
   }
 
+  async findBySlug(slug: string) {
+    const movie = await this.movieModel.findOne({ slug }).exec();
+    if (!movie) {
+      throw new NotFoundException(`Movie with slug "${slug}" not found`);
+    }
+    return movie;
+  }
+
   async update(id: string, updateMovieDto: Partial<CreateMovieDto>) {
+    const updateData: any = { ...updateMovieDto };
+    
+    // Regenerate slug if title is updated
+    if (updateMovieDto.title) {
+      updateData.slug = this.generateSlug(updateMovieDto.title);
+    }
+    
     const movie = await this.movieModel
-      .findByIdAndUpdate(id, updateMovieDto, { new: true })
+      .findByIdAndUpdate(id, updateData, { new: true })
       .exec();
     
     if (!movie) {

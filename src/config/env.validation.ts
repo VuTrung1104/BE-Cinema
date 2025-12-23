@@ -39,6 +39,32 @@ export class EnvironmentVariables {
   @IsEnum(Environment)
   NODE_ENV: Environment = Environment.Development;
 
+  // Admin Account
+  @IsString()
+  @IsNotEmpty()
+  ADMIN_EMAIL: string;
+
+  @IsString()
+  @IsNotEmpty()
+  ADMIN_PASSWORD: string;
+
+  @IsString()
+  @IsNotEmpty()
+  ADMIN_NAME: string;
+
+  @IsString()
+  @IsNotEmpty()
+  ADMIN_PHONE: string;
+
+  // Swagger Authentication
+  @IsString()
+  @IsNotEmpty()
+  SWAGGER_USERNAME: string;
+
+  @IsString()
+  @IsNotEmpty()
+  SWAGGER_PASSWORD: string;
+
   // Email (optional for development)
   @IsString()
   EMAIL_HOST?: string;

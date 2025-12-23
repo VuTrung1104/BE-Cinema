@@ -31,22 +31,33 @@ export class MoviesController {
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 10, max: 100)' })
   @ApiQuery({ name: 'genre', required: false, type: String, description: 'Filter by genre' })
+  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by status (now-showing, coming-soon, ended)' })
   @ApiQuery({ name: 'isNowShowing', required: false, type: String, description: 'Filter by showing status (true/false)' })
   @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by title, description or director' })
   findAll(
     @Query() paginationDto: PaginationDto,
     @Query('genre') genre?: string,
+    @Query('status') status?: string,
     @Query('isNowShowing') isNowShowing?: string,
     @Query('search') search?: string,
   ) {
     return this.moviesService.findAll(
       {
         genre,
-        isNowShowing: isNowShowing === 'true',
+        status,
+        isNowShowing: isNowShowing !== undefined ? isNowShowing === 'true' : undefined,
         search,
       },
       paginationDto,
     );
+  }
+
+  @Get('slug/:slug')
+  @ApiOperation({ summary: 'Get movie by slug' })
+  @ApiResponse({ status: 200, description: 'Movie found' })
+  @ApiResponse({ status: 404, description: 'Movie not found' })
+  findBySlug(@Param('slug') slug: string) {
+    return this.moviesService.findBySlug(slug);
   }
 
   @Get(':id')

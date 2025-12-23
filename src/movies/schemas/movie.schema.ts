@@ -19,6 +19,9 @@ export class Movie {
   @Prop({ required: true })
   title: string;
 
+  @Prop({ required: true, unique: true })
+  slug: string;
+
   @Prop({ required: true })
   description: string;
 
@@ -48,6 +51,13 @@ export class Movie {
 
   @Prop({ default: true })
   isNowShowing: boolean;
+
+  @Prop({
+    type: String,
+    enum: ['now-showing', 'coming-soon', 'ended'],
+    default: 'now-showing'
+  })
+  status: string;
 }
 
 export const MovieSchema = SchemaFactory.createForClass(Movie);
