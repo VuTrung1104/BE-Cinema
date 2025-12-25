@@ -264,4 +264,44 @@ export class AuthService {
       message: 'Password reset successfully',
     };
   }
+
+  // ==================== GOOGLE OAUTH ====================
+
+  async googleLogin(userData: any) {
+    const { email, fullName, googleId } = userData;
+
+    // Check if user exists
+    let user = await this.userModel.findOne({ email });
+
+    if (!user) {
+      // Create new user from Google
+      user = new this.userModel({
+        email,
+        fullName,
+        googleId,
+        isEmailVerified: true, // Google emails are already verified
+        isActive: true,
+        role: 'user',
+      });
+      await user.save();
+    } else if (!user.googleId) {
+      // Link Google account to existing user
+      user.googleId = googleId;
+      user.isEmailVerified = true;
+      await user.save();
+    }
+
+    // Generate tokens
+    const tokens = this.generateToken(user);
+
+    return {
+      user: {
+        id: user._id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      ...tokens,
+    };
+  }
 }

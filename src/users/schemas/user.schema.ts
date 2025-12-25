@@ -16,7 +16,7 @@ export class User {
   @Prop({ required: true, unique: true })
   email: string;
 
-  @Prop({ required: true, select: false })
+  @Prop({ required: false, select: false })
   password: string;
 
   @Prop({ required: true })
@@ -48,6 +48,12 @@ export class User {
 
   @Prop({ default: 0 })
   violationCount: number;
+
+  @Prop({ unique: true, sparse: true })
+  googleId: string;
+
+  @Prop({ unique: true, sparse: true })
+  facebookId: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -61,6 +67,11 @@ UserSchema.index({ fullName: 'text', email: 'text' }); // Text search for users
 
 // Hash password before saving
 UserSchema.pre('save', async function (next) {
+  // Skip if no password (OAuth users)
+  if (!this.password) {
+    return next();
+  }
+
   // Only hash if password is modified or new
   if (!this.isModified('password')) {
     return next();

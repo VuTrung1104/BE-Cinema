@@ -6,6 +6,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { VerificationCode, VerificationCodeSchema } from './schemas/verification-code.schema';
 import { EmailService } from '../common/services/email.service';
@@ -29,7 +30,7 @@ import { EmailService } from '../common/services/email.service';
     ]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, EmailService],
+  providers: [AuthService, JwtStrategy, GoogleStrategy, EmailService],
   exports: [AuthService, JwtStrategy, PassportModule, JwtModule],
 })
 export class AuthModule {}
