@@ -51,7 +51,8 @@ async function cleanupOrphanedBookings() {
     if (expiredBookings.length > 0) {
       console.log('\n⚠️  Expired PENDING Bookings:');
       expiredBookings.forEach((booking) => {
-        const age = Math.floor((Date.now() - booking.createdAt.getTime()) / (1000 * 60));
+        const createdAt = (booking as any).createdAt;
+        const age = createdAt ? Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60)) : 0;
         console.log(`   - ${booking.bookingCode} (${age} minutes old)`);
       });
     }

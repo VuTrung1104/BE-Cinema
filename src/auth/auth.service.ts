@@ -355,7 +355,7 @@ export class AuthService {
 
   // ==================== LOCAL AUTHENTICATION ====================
 
-  async validateUser(email: string, password: string): Promise<any> {
+  async validateLocalUser(email: string, password: string): Promise<any> {
     // Find user and explicitly select password field
     const user = await this.userModel.findOne({ email }).select('+password').exec();
     
