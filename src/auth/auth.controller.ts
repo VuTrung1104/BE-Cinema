@@ -127,4 +127,22 @@ export class AuthController {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
     res.redirect(`${frontendUrl}?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}`);
   }
+
+  @Get('facebook')
+  @UseGuards(AuthGuard('facebook'))
+  @ApiOperation({ summary: 'Facebook OAuth login', description: 'Redirect to Facebook for authentication' })
+  @ApiResponse({ status: 302, description: 'Redirect to Facebook OAuth page' })
+  async facebookAuth() {
+    // Guard redirects to Facebook
+  }
+
+  @Get('facebook/callback')
+  @UseGuards(AuthGuard('facebook'))
+  @ApiOperation({ summary: 'Facebook OAuth callback', description: 'Handle Facebook OAuth callback and return tokens' })
+  @ApiResponse({ status: 302, description: 'Redirect to frontend with tokens' })
+  async facebookAuthCallback(@Req() req: Request, @Res() res: Response) {
+    const result = await this.authService.facebookLogin(req.user);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    res.redirect(`${frontendUrl}?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}`);
+  }
 }

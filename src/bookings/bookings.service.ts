@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Logger, ConflictException } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Model, Connection, Types } from 'mongoose';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Booking, BookingDocument, BookingStatus } from './schemas/booking.schema';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { ShowtimesService } from '../showtimes/showtimes.service';
@@ -557,5 +558,85 @@ export class BookingsService {
       bookingCode: booking.bookingCode,
       qrCodeUrl,
     };
+  }
+
+  // ==================== CRON JOBS ====================
+
+  /**
+   * Auto-cancel expired PENDING bookings
+   * Runs every 5 minutes
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async autoCancelExpiredBookings() {
+    try {
+      const expirationTime = new Date(Date.now() - 15 * 60 * 1000); // 15 minutes ago
+
+      const expiredBookings = await this.bookingModel.find({
+        status: BookingStatus.PENDING,
+        createdAt: { $lt: expirationTime },
+      });
+
+      if (expiredBookings.length === 0) {
+        return;
+      }
+
+      this.logger.log(`Found ${expiredBookings.length} expired bookings to cancel`);
+
+      for (const booking of expiredBookings) {
+        // Update booking status
+        booking.status = BookingStatus.CANCELLED;
+        await booking.save();
+
+        // Release locked seats
+        await this.showtimeModel.updateOne(
+          { _id: booking.showtimeId },
+          {
+            $pull: {
+              bookedSeats: { $in: booking.seats },
+              tempLockedSeats: {
+                userId: booking.userId.toString(),
+                seat: { $in: booking.seats },
+              },
+            },
+          },
+        );
+
+        this.logger.log(
+          `Auto-cancelled expired booking ${booking.bookingCode} for user ${booking.userId}`,
+        );
+      }
+
+      this.logger.log(`Auto-cancelled ${expiredBookings.length} expired bookings`);
+    } catch (error) {
+      this.logger.error('Error auto-cancelling expired bookings:', error.message);
+    }
+  }
+
+  /**
+   * Cleanup old temp seat locks from showtimes
+   * Runs every 10 minutes
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async cleanupExpiredSeatLocks() {
+    try {
+      const now = new Date();
+
+      const result = await this.showtimeModel.updateMany(
+        {},
+        {
+          $pull: {
+            tempLockedSeats: { expiresAt: { $lt: now } },
+          },
+        },
+      );
+
+      if (result.modifiedCount > 0) {
+        this.logger.log(
+          `Cleaned up expired seat locks from ${result.modifiedCount} showtimes`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Error cleaning up expired seat locks:', error.message);
+    }
   }
 }

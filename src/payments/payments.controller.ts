@@ -3,12 +3,14 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@ne
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreateVNPayPaymentDto, VNPayReturnDto } from './dto/vnpay-payment.dto';
+import { CreateMoMoPaymentDto } from './dto/momo-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/schemas/user.schema';
 import { PaymentStatus } from './schemas/payment.schema';
 import { Request, Response } from 'express';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -104,6 +106,27 @@ export class PaymentsController {
     return {
       RspCode: result.success ? '00' : '99',
       Message: result.message,
+    };
+  }
+
+  // MoMo endpoints
+  @Post('momo/create')
+  @ApiOperation({ summary: 'Create MoMo payment URL' })
+  @ApiResponse({ status: 200, description: 'MoMo payment URL created successfully', schema: { example: { paymentId: 'xxx', payUrl: 'https://test-payment.momo.vn/...' } } })
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  createMoMoPayment(@Body() createMoMoPaymentDto: CreateMoMoPaymentDto) {
+    return this.paymentsService.createMoMoPayment(createMoMoPaymentDto);
+  }
+
+  @Public()
+  @Post('momo/callback')
+  @ApiOperation({ summary: 'MoMo IPN callback handler' })
+  @ApiResponse({ status: 200, description: 'Callback processed successfully' })
+  async momoCallback(@Body() callbackData: any) {
+    const result = await this.paymentsService.handleMoMoCallback(callbackData);
+    return {
+      resultCode: result.success ? 0 : 1,
+      message: result.message,
     };
   }
 }

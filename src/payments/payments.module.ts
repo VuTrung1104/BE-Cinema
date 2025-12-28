@@ -5,6 +5,7 @@ import { PaymentsController } from './payments.controller';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
 import { BookingsModule } from '../bookings/bookings.module';
 import { VNPayService } from './services/vnpay.service';
+import { MomoService } from './services/momo.service';
 
 @Module({
   imports: [
@@ -12,7 +13,7 @@ import { VNPayService } from './services/vnpay.service';
     BookingsModule,
   ],
   controllers: [PaymentsController],
-  providers: [PaymentsService, VNPayService],
+  providers: [PaymentsService, VNPayService, MomoService],
   exports: [PaymentsService],
 })
 export class PaymentsModule {}

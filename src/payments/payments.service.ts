@@ -4,8 +4,10 @@ import { Model } from 'mongoose';
 import { Payment, PaymentDocument, PaymentStatus } from './schemas/payment.schema';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreateVNPayPaymentDto, VNPayReturnDto, VNPayIPNDto } from './dto/vnpay-payment.dto';
+import { CreateMoMoPaymentDto } from './dto/momo-payment.dto';
 import { BookingsService } from '../bookings/bookings.service';
 import { VNPayService } from './services/vnpay.service';
+import { MomoService } from './services/momo.service';
 
 @Injectable()
 export class PaymentsService {
@@ -15,6 +17,7 @@ export class PaymentsService {
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
     private bookingsService: BookingsService,
     private vnpayService: VNPayService,
+    private momoService: MomoService,
   ) {}
 
   async create(createPaymentDto: CreatePaymentDto) {
@@ -327,6 +330,132 @@ export class PaymentsService {
 
       this.logger.warn(
         `VNPay payment failed for booking ${bookingId}, code: ${responseCode}`,
+      );
+    }
+  }
+
+  // ==================== MOMO PAYMENT METHODS ====================
+
+  /**
+   * Create MoMo payment
+   */
+  async createMoMoPayment(createMoMoPaymentDto: CreateMoMoPaymentDto) {
+    const { bookingId, amount, orderInfo, redirectUrl } = createMoMoPaymentDto;
+
+    // Verify booking exists
+    const booking = await this.bookingsService.findOne(bookingId);
+
+    if (booking.status !== 'pending') {
+      throw new BadRequestException('Booking is not in pending status');
+    }
+
+    // Create payment record
+    const transactionId = this.generateTransactionId();
+    const payment = new this.paymentModel({
+      bookingId,
+      amount,
+      method: 'momo',
+      transactionId,
+      status: PaymentStatus.PENDING,
+    });
+    await payment.save();
+
+    // Create MoMo payment URL
+    const momoResult = await this.momoService.createPayment({
+      orderId: bookingId,
+      amount,
+      orderInfo: orderInfo || `Thanh toán đặt vé - Booking ${bookingId}`,
+      redirectUrl,
+    });
+
+    this.logger.log(`MoMo payment created for booking ${bookingId}`);
+
+    return {
+      paymentId: payment._id,
+      payUrl: momoResult.payUrl,
+      deeplink: momoResult.deeplink,
+      qrCodeUrl: momoResult.qrCodeUrl,
+    };
+  }
+
+  /**
+   * Handle MoMo callback (IPN)
+   */
+  async handleMoMoCallback(callbackData: any) {
+    try {
+      // Verify callback signature
+      const isValid = this.momoService.verifyCallback(callbackData);
+
+      if (!isValid) {
+        this.logger.error('Invalid MoMo callback signature');
+        return {
+          success: false,
+          message: 'Invalid signature',
+        };
+      }
+
+      const { orderId, resultCode, transId } = callbackData;
+
+      // Check if payment successful
+      if (this.momoService.isPaymentSuccessful(resultCode)) {
+        await this.completeMoMoPayment(orderId, transId);
+        return {
+          success: true,
+          message: 'Payment confirmed',
+        };
+      } else {
+        await this.failMoMoPayment(orderId, resultCode);
+        return {
+          success: false,
+          message: 'Payment failed',
+        };
+      }
+    } catch (error) {
+      this.logger.error('Error handling MoMo callback:', error.message);
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  /**
+   * Mark MoMo payment as completed
+   */
+  private async completeMoMoPayment(bookingId: string, transId: string) {
+    const payment = await this.paymentModel.findOne({
+      bookingId,
+      status: PaymentStatus.PENDING,
+    });
+
+    if (payment) {
+      payment.status = PaymentStatus.COMPLETED;
+      payment.paidAt = new Date();
+      payment.transactionId = transId || payment.transactionId;
+      await payment.save();
+
+      // Confirm booking
+      await this.bookingsService.confirmBooking(bookingId);
+
+      this.logger.log(`MoMo payment completed for booking ${bookingId}`);
+    }
+  }
+
+  /**
+   * Mark MoMo payment as failed
+   */
+  private async failMoMoPayment(bookingId: string, resultCode: number) {
+    const payment = await this.paymentModel.findOne({
+      bookingId,
+      status: PaymentStatus.PENDING,
+    });
+
+    if (payment) {
+      payment.status = PaymentStatus.FAILED;
+      await payment.save();
+
+      this.logger.warn(
+        `MoMo payment failed for booking ${bookingId}, code: ${resultCode}`,
       );
     }
   }

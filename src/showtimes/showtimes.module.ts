@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ShowtimesService } from './showtimes.service';
 import { ShowtimesController } from './showtimes.controller';
+import { ShowtimesGateway } from './showtimes.gateway';
 import { Showtime, ShowtimeSchema } from './schemas/showtime.schema';
 
 @Module({
@@ -9,7 +10,7 @@ import { Showtime, ShowtimeSchema } from './schemas/showtime.schema';
     MongooseModule.forFeature([{ name: Showtime.name, schema: ShowtimeSchema }]),
   ],
   controllers: [ShowtimesController],
-  providers: [ShowtimesService],
+  providers: [ShowtimesService, ShowtimesGateway],
   exports: [ShowtimesService],
 })
 export class ShowtimesModule {}

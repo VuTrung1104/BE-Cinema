@@ -304,4 +304,92 @@ export class AuthService {
       ...tokens,
     };
   }
+
+  // ==================== FACEBOOK OAUTH ====================
+
+  async facebookLogin(userData: any) {
+    const { email, fullName, facebookId, avatar } = userData;
+
+    // Check if user exists
+    let user = await this.userModel.findOne({ 
+      $or: [{ email }, { facebookId }] 
+    });
+
+    if (!user) {
+      // Create new user from Facebook
+      user = new this.userModel({
+        email: email || `facebook_${facebookId}@placeholder.com`, // Some Facebook accounts don't have email
+        fullName,
+        facebookId,
+        avatar,
+        isEmailVerified: !!email, // Only verified if email was provided
+        isActive: true,
+        role: 'user',
+      });
+      await user.save();
+    } else if (!user.facebookId) {
+      // Link Facebook account to existing user
+      user.facebookId = facebookId;
+      if (avatar && !user.avatar) {
+        user.avatar = avatar;
+      }
+      if (email) {
+        user.isEmailVerified = true;
+      }
+      await user.save();
+    }
+
+    // Generate tokens
+    const tokens = this.generateToken(user);
+
+    return {
+      user: {
+        id: user._id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      ...tokens,
+    };
+  }
+
+  // ==================== LOCAL AUTHENTICATION ====================
+
+  async validateUser(email: string, password: string): Promise<any> {
+    // Find user and explicitly select password field
+    const user = await this.userModel.findOne({ email }).select('+password').exec();
+    
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is inactive');
+    }
+
+    // Check if user is locked
+    if (user.isLocked) {
+      // Check if lock has expired
+      if (user.lockUntil && user.lockUntil < new Date()) {
+        user.isLocked = false;
+        user.lockUntil = null;
+        user.lockReason = null;
+        await user.save();
+      } else {
+        throw new UnauthorizedException('Account is locked');
+      }
+    }
+
+    // Verify password using schema method
+    const isPasswordValid = await user.comparePassword(password);
+    
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // Return user without password
+    const { password: _, ...result } = user.toObject();
+    return result;
+  }
 }
