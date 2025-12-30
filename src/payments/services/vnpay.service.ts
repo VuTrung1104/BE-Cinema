@@ -17,7 +17,7 @@ export class VNPayService {
     this.vnpTmnCode = this.configService.get<string>('VNPAY_TMN_CODE');
     this.vnpHashSecret = this.configService.get<string>('VNPAY_HASH_SECRET');
     this.vnpUrl = this.configService.get<string>('VNPAY_URL', 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html');
-    this.vnpReturnUrl = this.configService.get<string>('VNPAY_RETURN_URL', 'http://localhost:3000/api/v1/payments/vnpay-return');
+    this.vnpReturnUrl = this.configService.get<string>('VNPAY_RETURN_URL', 'http://localhost:5000/api/v1/payments/vnpay-return');
     this.vnpApiUrl = this.configService.get<string>('VNPAY_API_URL', 'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction');
   }
 
