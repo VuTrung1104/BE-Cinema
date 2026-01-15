@@ -15,11 +15,17 @@ export class CreateTheaterDto {
   @IsString()
   phone?: string;
 
+  @IsOptional()
+  @IsString()
+  image?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(1)
-  totalSeats: number;
+  totalSeats?: number;
 
+  @IsOptional()
   @IsArray()
   @IsNumber({}, { each: true })
-  rows: number[];
+  rows?: number[];
 }

@@ -17,10 +17,13 @@ export class Theater {
   @Prop()
   phone: string;
 
-  @Prop({ required: true })
+  @Prop()
+  image: string;
+
+  @Prop({ default: 0 })
   totalSeats: number;
 
-  @Prop({ type: [Number], required: true })
+  @Prop({ type: [Number], default: [] })
   rows: number[]; // Array of seat counts per row
 
   @Prop({ default: true })

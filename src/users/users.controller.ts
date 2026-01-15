@@ -77,6 +77,36 @@ export class UsersController {
     return this.usersService.findOne(id);
   }
 
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update user (Admin only)', description: 'Update user information including role. Requires ADMIN role.' })
+  @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing token' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Requires ADMIN role' })
+  @ApiResponse({ status: 404, description: 'Not found - User does not exist' })
+  updateUser(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return this.usersService.updateUser(id, updateUserDto);
+  }
+
+  @Put(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update user (Admin only)', description: 'Update user information including role. Requires ADMIN role.' })
+  @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing token' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Requires ADMIN role' })
+  @ApiResponse({ status: 404, description: 'Not found - User does not exist' })
+  updateUserPut(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return this.usersService.updateUser(id, updateUserDto);
+  }
+
   // ==================== AVATAR UPLOAD ====================
 
   @Post('avatar')

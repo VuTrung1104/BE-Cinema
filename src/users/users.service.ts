@@ -66,6 +66,33 @@ export class UsersService {
     return this.findOne(userId);
   }
 
+  async updateUser(userId: string, updateUserDto: UpdateUserDto) {
+    const { email, ...updateData } = updateUserDto;
+
+    if (email) {
+      const existingUser = await this.userModel.findOne({ 
+        email, 
+        _id: { $ne: userId } 
+      });
+      
+      if (existingUser) {
+        throw new ConflictException('Email is already in use');
+      }
+      updateData['email'] = email;
+    }
+
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, updateData, { new: true })
+      .select('-password')
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    return user;
+  }
+
   // ==================== AVATAR UPLOAD ====================
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
