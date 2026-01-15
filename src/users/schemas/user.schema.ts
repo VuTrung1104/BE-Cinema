@@ -25,6 +25,9 @@ export class User {
   @Prop()
   phone: string;
 
+  @Prop()
+  dateOfBirth: string;
+
   @Prop({ type: String, enum: UserRole, default: UserRole.USER })
   role: UserRole;
 
