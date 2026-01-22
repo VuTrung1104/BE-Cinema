@@ -59,7 +59,7 @@ export class AuthService {
 
     // Find user and explicitly select password field
     const user = await this.userModel.findOne({ email }).select('+password').exec();
-    
+
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
     }

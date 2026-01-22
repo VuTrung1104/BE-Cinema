@@ -4,7 +4,7 @@ import { Model } from 'mongoose';
 import { Payment, PaymentDocument, PaymentStatus } from './schemas/payment.schema';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreateVNPayPaymentDto, VNPayReturnDto, VNPayIPNDto } from './dto/vnpay-payment.dto';
-import { CreateMoMoPaymentDto } from './dto/momo-payment.dto';
+import { CreateMoMoPaymentDto, MoMoReturnDto, MoMoIPNDto } from './dto/momo-payment.dto';
 import { BookingsService } from '../bookings/bookings.service';
 import { VNPayService } from './services/vnpay.service';
 import { MomoService } from './services/momo.service';
@@ -339,124 +339,173 @@ export class PaymentsService {
   /**
    * Create MoMo payment
    */
-  async createMoMoPayment(createMoMoPaymentDto: CreateMoMoPaymentDto) {
-    const { bookingId, amount, orderInfo, redirectUrl } = createMoMoPaymentDto;
+  async createMoMoPayment(dto: CreateMoMoPaymentDto) {
+    const { bookingId, amount, orderInfo } = dto;
 
-    // Verify booking exists
+    // Verify booking exists and is pending
     const booking = await this.bookingsService.findOne(bookingId);
-
     if (booking.status !== 'pending') {
       throw new BadRequestException('Booking is not in pending status');
     }
 
-    // Create payment record
-    const transactionId = this.generateTransactionId();
+    // Generate orderId: bookingId-timestamp
+    const orderId = `${bookingId}-${Date.now()}`;
+
+    // Create payment record in DB
     const payment = new this.paymentModel({
       bookingId,
       amount,
       method: 'momo',
-      transactionId,
       status: PaymentStatus.PENDING,
+      transactionId: orderId,
     });
     await payment.save();
 
-    // Create MoMo payment URL
-    const momoResult = await this.momoService.createPayment({
-      orderId: bookingId,
-      amount,
-      orderInfo: orderInfo || `Thanh toán đặt vé - Booking ${bookingId}`,
-      redirectUrl,
+    // Call MoMo API to get payment URL
+    const momoResponse = await this.momoService.createPayment({
+      ...dto,
+      orderId,
     });
 
-    this.logger.log(`MoMo payment created for booking ${bookingId}`);
+    this.logger.log(`MoMo payment created for booking ${bookingId}, orderId: ${orderId}`);
 
     return {
       paymentId: payment._id,
-      payUrl: momoResult.payUrl,
-      deeplink: momoResult.deeplink,
-      qrCodeUrl: momoResult.qrCodeUrl,
+      paymentUrl: momoResponse.payUrl, // Rename payUrl to paymentUrl for FE
+      qrCodeUrl: momoResponse.qrCodeUrl,
+      orderId: momoResponse.orderId,
+      requestId: momoResponse.requestId,
     };
   }
 
   /**
-   * Handle MoMo callback (IPN)
+   * Handle MoMo Return - Process payment immediately (don't wait for IPN)
    */
-  async handleMoMoCallback(callbackData: any) {
+  async handleMoMoReturn(data: MoMoReturnDto) {
+    const { orderId, resultCode } = data;
+    const bookingId = orderId.split('-')[0];
+
+    this.logger.log(`=== MoMo Return Called === orderId: ${orderId}, resultCode: ${resultCode}`);
+
+    // Process payment immediately based on resultCode
+    if (resultCode === 0) {
+      // SUCCESS - Confirm booking immediately
+      try {
+        this.logger.log(`MoMo Return - Payment SUCCESS for booking ${bookingId}`);
+        
+        const payment = await this.paymentModel.findOne({
+          transactionId: orderId,
+          status: PaymentStatus.PENDING,
+        });
+
+        if (!payment) {
+          this.logger.warn(`MoMo Return - Payment not found or already processed: ${orderId}`);
+        } else {
+          this.logger.log(`MoMo Return - Found payment ${payment._id}, confirming booking...`);
+          
+          // Update payment status
+          payment.status = PaymentStatus.COMPLETED;
+          payment.paidAt = new Date();
+          await payment.save();
+
+          // Confirm booking and move seats from locked to booked
+          await this.bookingsService.confirmBooking(payment.bookingId.toString());
+          this.logger.log(`✅ MoMo Return - Booking ${payment.bookingId} CONFIRMED successfully!`);
+        }
+      } catch (error) {
+        this.logger.error(`❌ MoMo Return - Error confirming booking: ${error.message}`, error.stack);
+      }
+    } else {
+      // FAILED - Cancel booking immediately
+      try {
+        this.logger.log(`MoMo Return - Payment FAILED for booking ${bookingId}, code: ${resultCode}`);
+        
+        const payment = await this.paymentModel.findOne({
+          transactionId: orderId,
+          status: PaymentStatus.PENDING,
+        });
+
+        if (!payment) {
+          this.logger.warn(`MoMo Return - Payment not found or already processed: ${orderId}`);
+        } else {
+          this.logger.log(`MoMo Return - Found payment ${payment._id}, cancelling booking...`);
+          
+          // Update payment status
+          payment.status = PaymentStatus.FAILED;
+          await payment.save();
+
+          // Cancel booking and release seats
+          await this.bookingsService.cancelBooking(payment.bookingId.toString());
+          this.logger.log(`✅ MoMo Return - Booking ${payment.bookingId} cancelled successfully`);
+        }
+      } catch (error) {
+        this.logger.error(`❌ MoMo Return - Error cancelling booking: ${error.message}`, error.stack);
+      }
+    }
+
+    this.logger.log(`=== MoMo Return Completed ===`);
+
+    // Return info for redirect
+    return {
+      success: resultCode === 0,
+      bookingId,
+      orderId,
+    };
+  }
+
+  /**
+   * Handle MoMo IPN - XỬ LÝ TOÀN BỘ business logic
+   */
+  async handleMoMoIPN(data: MoMoIPNDto) {
+    const { orderId, resultCode, transId } = data;
+
     try {
-      // Verify callback signature
-      const isValid = this.momoService.verifyCallback(callbackData);
-
+      // 1. Verify signature
+      const { isValid } = this.momoService.verifySignature(data);
       if (!isValid) {
-        this.logger.error('Invalid MoMo callback signature');
-        return {
-          success: false,
-          message: 'Invalid signature',
-        };
+        this.logger.log(`MoMo IPN - Invalid signature for order ${orderId}`);
+        return { resultCode: 0, message: 'IPN received' };
       }
 
-      const { orderId, resultCode, transId } = callbackData;
+      // 2. Find payment
+      const payment = await this.paymentModel.findOne({
+        transactionId: orderId,
+        status: PaymentStatus.PENDING,
+      });
 
-      // Check if payment successful
-      if (this.momoService.isPaymentSuccessful(resultCode)) {
-        await this.completeMoMoPayment(orderId, transId);
-        return {
-          success: true,
-          message: 'Payment confirmed',
-        };
+      if (!payment) {
+        this.logger.log(`MoMo IPN - Payment not found for order ${orderId}`);
+        return { resultCode: 0, message: 'IPN received' };
+      }
+
+      // 3. Update payment status: COMPLETED or FAILED
+      if (resultCode === 0) {
+        // Success - COMPLETED
+        payment.status = PaymentStatus.COMPLETED;
+        payment.paidAt = new Date();
+        payment.transactionId = transId;
+        await payment.save();
+
+        // Confirm booking
+        await this.bookingsService.confirmBooking(payment.bookingId.toString());
+        this.logger.log(`MoMo IPN - Booking ${payment.bookingId} CONFIRMED`);
       } else {
-        await this.failMoMoPayment(orderId, resultCode);
-        return {
-          success: false,
-          message: 'Payment failed',
-        };
+        // Failed
+        payment.status = PaymentStatus.FAILED;
+        await payment.save();
+
+        // Cancel booking and release seats
+        await this.bookingsService.cancelBooking(payment.bookingId.toString());
+        this.logger.log(`MoMo IPN - Booking ${payment.bookingId} CANCELLED and seats released (code: ${resultCode})`);
       }
+
+      return { resultCode: 0, message: 'Success' };
     } catch (error) {
-      this.logger.error('Error handling MoMo callback:', error.message);
-      return {
-        success: false,
-        message: error.message,
-      };
+      // KHÔNG throw, chỉ log
+      this.logger.log(`MoMo IPN processed for order ${orderId}`);
+      return { resultCode: 0, message: 'IPN received' };
     }
   }
 
-  /**
-   * Mark MoMo payment as completed
-   */
-  private async completeMoMoPayment(bookingId: string, transId: string) {
-    const payment = await this.paymentModel.findOne({
-      bookingId,
-      status: PaymentStatus.PENDING,
-    });
 
-    if (payment) {
-      payment.status = PaymentStatus.COMPLETED;
-      payment.paidAt = new Date();
-      payment.transactionId = transId || payment.transactionId;
-      await payment.save();
-
-      // Confirm booking
-      await this.bookingsService.confirmBooking(bookingId);
-
-      this.logger.log(`MoMo payment completed for booking ${bookingId}`);
-    }
-  }
-
-  /**
-   * Mark MoMo payment as failed
-   */
-  private async failMoMoPayment(bookingId: string, resultCode: number) {
-    const payment = await this.paymentModel.findOne({
-      bookingId,
-      status: PaymentStatus.PENDING,
-    });
-
-    if (payment) {
-      payment.status = PaymentStatus.FAILED;
-      await payment.save();
-
-      this.logger.warn(
-        `MoMo payment failed for booking ${bookingId}, code: ${resultCode}`,
-      );
-    }
-  }
 }

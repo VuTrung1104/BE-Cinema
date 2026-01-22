@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AppService } from './app.service';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
+import { Public } from './auth/decorators/public.decorator';
 
 @ApiTags('health')
 @Controller()
@@ -16,6 +17,7 @@ export class AppController {
     this.startTime = Date.now();
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get welcome message' })
   @ApiResponse({ status: 200, description: 'Welcome message' })
@@ -23,6 +25,7 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Public()
   @Get('health')
   @ApiOperation({ summary: 'Health check endpoint' })
   @ApiResponse({ status: 200, description: 'Service health status', schema: {

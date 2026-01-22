@@ -30,9 +30,20 @@ export class BookingsController {
   @Get()
   @ApiOperation({ summary: 'Get all bookings (User sees own bookings, Admin sees all)' })
   @ApiResponse({ status: 200, description: 'Bookings retrieved successfully' })
-  findAll(@GetUser('userId') userId: string, @GetUser('role') role: string) {
+  findAll(
+    @GetUser('userId') userId: string,
+    @GetUser('role') role: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('status') status?: string,
+  ) {
     // Admin can see all bookings, users can only see their own
-    return this.bookingsService.findAll(role === UserRole.ADMIN ? undefined : userId);
+    return this.bookingsService.findAll(
+      role === UserRole.ADMIN ? undefined : userId,
+      page || 1,
+      limit || 20,
+      status,
+    );
   }
 
   @Get('code/:code')

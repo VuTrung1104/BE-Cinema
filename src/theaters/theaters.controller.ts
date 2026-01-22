@@ -5,6 +5,7 @@ import { CreateTheaterDto } from './dto/create-theater.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { UserRole } from '../users/schemas/user.schema';
 
 @ApiTags('theaters')
@@ -25,6 +26,7 @@ export class TheatersController {
     return this.theatersService.create(createTheaterDto);
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all theaters with optional city filter' })
   @ApiQuery({ name: 'city', required: false, description: 'Filter theaters by city' })
@@ -33,6 +35,7 @@ export class TheatersController {
     return this.theatersService.findAll(city);
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get theater by ID' })
   @ApiResponse({ status: 200, description: 'Theater found' })

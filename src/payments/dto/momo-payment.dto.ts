@@ -20,3 +20,47 @@ export class CreateMoMoPaymentDto {
   @IsOptional()
   redirectUrl?: string;
 }
+
+export class MoMoReturnDto {
+  @IsString()
+  partnerCode: string;
+
+  @IsString()
+  orderId: string;
+
+  @IsString()
+  requestId: string;
+
+  @IsNumber()
+  amount: number;
+
+  @IsString()
+  orderInfo: string;
+
+  @IsString()
+  orderType: string;
+
+  @IsString()
+  transId: string;
+
+  @IsNumber()
+  resultCode: number;
+
+  @IsString()
+  message: string;
+
+  @IsString()
+  payType: string;
+
+  @IsString()
+  responseTime: string;
+
+  @IsOptional()
+  @IsString()
+  extraData?: string;
+
+  @IsString()
+  signature: string;
+}
+
+export class MoMoIPNDto extends MoMoReturnDto {}

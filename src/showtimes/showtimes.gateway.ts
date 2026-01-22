@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { ShowtimesService } from './showtimes.service';
 
 interface SeatLock {
   seatId: string;
@@ -55,6 +56,8 @@ export class ShowtimesGateway implements OnGatewayConnection, OnGatewayDisconnec
   
   // Lock duration in milliseconds (15 minutes)
   private readonly LOCK_DURATION = 15 * 60 * 1000;
+
+  constructor(private readonly showtimesService: ShowtimesService) {}
 
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
@@ -245,6 +248,27 @@ export class ShowtimesGateway implements OnGatewayConnection, OnGatewayDisconnec
     };
   }
 
+  @SubscribeMessage('selectSeats')
+  async handleSelectSeats(
+    @MessageBody() data: { showtimeId: string; seats: string[]; userId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const { showtimeId, seats, userId } = data;
+    
+    // Just broadcast the current seat data to show real-time updates
+    // Actual locking will happen when user clicks "Thanh toán" (createBooking)
+    try {
+      await this.notifySeatUpdate(showtimeId);
+      
+      this.logger.log(`User ${userId} selected ${seats.length} seats, broadcasting update for showtime ${showtimeId}`);
+      
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Error broadcasting seat update: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Helper methods
   private getLockedSeats(showtimeId: string): Array<{ seatId: string; userId: string }> {
     if (!this.seatLocks.has(showtimeId)) {
@@ -315,6 +339,22 @@ export class ShowtimesGateway implements OnGatewayConnection, OnGatewayDisconnec
       });
 
       this.logger.log(`Auto-unlocked seat ${seatId} in showtime ${showtimeId} (expired)`);
+    }
+  }
+
+  /**
+   * Method to be called from bookings service to notify all clients about seat updates
+   */
+  async notifySeatUpdate(showtimeId: string) {
+    try {
+      const seatData = await this.showtimesService.getAvailableSeats(showtimeId);
+      this.server.to(showtimeId).emit('seatUpdate', {
+        ...seatData,
+        lastUpdate: new Date().toISOString(),
+      });
+      this.logger.log(`Broadcasted seat update for showtime ${showtimeId} to ${this.server.sockets.adapter.rooms.get(showtimeId)?.size || 0} clients`);
+    } catch (error) {
+      this.logger.error(`Error broadcasting seat update: ${error.message}`);
     }
   }
 }

@@ -5,6 +5,7 @@ import { CreateShowtimeDto } from './dto/create-showtime.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { UserRole } from '../users/schemas/user.schema';
 
 @ApiTags('showtimes')
@@ -25,6 +26,7 @@ export class ShowtimesController {
     return this.showtimesService.create(createShowtimeDto);
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all showtimes with optional filters' })
   @ApiQuery({ name: 'movieId', required: false, description: 'Filter by movie ID' })
@@ -39,6 +41,7 @@ export class ShowtimesController {
     return this.showtimesService.findAll({ movieId, theaterId, date });
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get showtime by ID' })
   @ApiResponse({ status: 200, description: 'Showtime found' })
@@ -47,6 +50,7 @@ export class ShowtimesController {
     return this.showtimesService.findOne(id);
   }
 
+  @Public()
   @Get(':id/seats')
   @ApiOperation({ summary: 'Get available seats for showtime' })
   @ApiResponse({ status: 200, description: 'Available seats retrieved successfully' })

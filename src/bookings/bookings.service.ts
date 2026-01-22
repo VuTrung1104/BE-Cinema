@@ -5,6 +5,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Booking, BookingDocument, BookingStatus } from './schemas/booking.schema';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { ShowtimesService } from '../showtimes/showtimes.service';
+import { ShowtimesGateway } from '../showtimes/showtimes.gateway';
 import { QRCodeService } from '../common/services/qrcode.service';
 import { EmailService } from '../common/services/email.service';
 import { Showtime, ShowtimeDocument } from '../showtimes/schemas/showtime.schema';
@@ -18,6 +19,7 @@ export class BookingsService {
     @InjectModel(Showtime.name) private showtimeModel: Model<ShowtimeDocument>,
     @InjectConnection() private connection: Connection,
     private showtimesService: ShowtimesService,
+    private showtimesGateway: ShowtimesGateway,
     private qrcodeService: QRCodeService,
     private emailService: EmailService,
   ) {}
@@ -193,13 +195,16 @@ export class BookingsService {
 
       await booking.save({ session });
 
-      // Step 7: Book seats in showtime within same transaction (not yet committed)
-      await this.showtimesService.bookSeats(showtimeId, seats);
+      // Step 7: Seats are already locked in tempLockedSeats (from lockSeatsInDB)
+      // They will be moved to bookedSeats only when booking is confirmed (after payment)
 
-      // CRITICAL: Commit transaction - both booking and seat booking succeed together
+      // CRITICAL: Commit transaction - booking is saved
       await session.commitTransaction();
       
-      this.logger.log(`Booking created successfully: ${bookingCode}`);
+      this.logger.log(`Booking created successfully: ${bookingCode} with locked seats: ${seats.join(', ')}`);
+
+      // Notify all clients via WebSocket
+      await this.showtimesGateway.notifySeatUpdate(showtimeId);
 
       return booking;
 
@@ -224,9 +229,21 @@ export class BookingsService {
     }
   }
 
-  async findAll(userId?: string) {
-    const query = userId ? { userId } : {};
-    return this.bookingModel
+  async findAll(
+    userId?: string,
+    page: number = 1,
+    limit: number = 20,
+    status?: string,
+  ) {
+    const query: any = userId ? { userId } : {};
+    if (status) {
+      query.status = status;
+    }
+
+    const skip = (page - 1) * limit;
+    const total = await this.bookingModel.countDocuments(query).exec();
+    
+    const bookings = await this.bookingModel
       .find(query)
       .populate({
         path: 'showtimeId',
@@ -235,8 +252,22 @@ export class BookingsService {
           { path: 'theaterId' }
         ]
       })
+      .populate('userId', 'fullName email')
+      .populate('paymentId', 'method status transactionId')
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .exec();
+
+    return {
+      data: bookings,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async findOne(id: string) {
@@ -293,19 +324,46 @@ export class BookingsService {
       throw new NotFoundException(`Booking with ID ${id} not found`);
     }
 
+    // Idempotency: If already confirmed, just return (prevent double-processing from Return + IPN)
+    if (booking.status === BookingStatus.CONFIRMED) {
+      this.logger.log(`Booking ${id} already confirmed, skipping`);
+      return booking;
+    }
+
     if (booking.status !== BookingStatus.PENDING) {
       throw new BadRequestException('Booking is not in pending status');
     }
 
+    // Extract showtime ID (handle both ObjectId and populated object)
+    const showtimeId = typeof booking.showtimeId === 'object' && booking.showtimeId._id 
+      ? booking.showtimeId._id.toString() 
+      : booking.showtimeId.toString();
+
+    // Move seats from tempLockedSeats to bookedSeats
+    await this.showtimesService.bookSeats(
+      showtimeId,
+      booking.seats,
+    );
+
+    // Release ALL temp locks for these seats (regardless of userId)
+    // This ensures seats move from "locked" to "booked" status
+    await this.showtimeModel.updateOne(
+      { _id: showtimeId },
+      {
+        $pull: {
+          tempLockedSeats: {
+            seat: { $in: booking.seats },
+          },
+        },
+      },
+    );
+    this.logger.log(`Temp locks removed for seats: ${booking.seats.join(', ')}`);
+
     booking.status = BookingStatus.CONFIRMED;
     await booking.save();
 
-    // Release MongoDB locks when booking is confirmed (payment completed)
-    await this.unlockSeatsInDB(
-      booking.showtimeId.toString(),
-      booking.seats,
-      booking.userId.toString(),
-    );
+    // Notify all clients via WebSocket
+    await this.showtimesGateway.notifySeatUpdate(showtimeId);
 
     // Generate QR code for booking
     try {
@@ -363,22 +421,45 @@ export class BookingsService {
       throw new NotFoundException(`Booking with ID ${id} not found`);
     }
 
+    // Idempotency: If already cancelled, just return (prevent double-processing)
     if (booking.status === BookingStatus.CANCELLED) {
-      throw new BadRequestException('Booking is already cancelled');
+      this.logger.log(`Booking ${id} already cancelled, skipping`);
+      return booking;
     }
 
-    // Release the booked seats in database
-    await this.showtimesService.releaseSeats(
-      booking.showtimeId.toString(),
-      booking.seats,
-    );
+    // Don't allow cancelling confirmed bookings from payment flows
+    if (booking.status === BookingStatus.CONFIRMED) {
+      throw new BadRequestException('Cannot cancel confirmed booking via payment flow');
+    }
 
-    // Release MongoDB locks
-    await this.unlockSeatsInDB(
-      booking.showtimeId.toString(),
-      booking.seats,
-      booking.userId.toString(),
-    );
+    // Try to release the booked seats in database (if showtime still exists)
+    try {
+      await this.showtimesService.releaseSeats(
+        booking.showtimeId.toString(),
+        booking.seats,
+      );
+
+      // Release MongoDB locks
+      await this.unlockSeatsInDB(
+        booking.showtimeId.toString(),
+        booking.seats,
+        booking.userId.toString(),
+      );
+
+      // Notify all clients via WebSocket
+      await this.showtimesGateway.notifySeatUpdate(booking.showtimeId.toString());
+    } catch (error) {
+      // If showtime not found (deleted), just log warning and continue with cancellation
+      if (error.message?.includes('not found')) {
+        this.logger.warn(
+          `Showtime ${booking.showtimeId} not found for booking ${booking.bookingCode}. ` +
+          `Proceeding with cancellation anyway (orphaned booking).`
+        );
+      } else {
+        // Re-throw other errors
+        throw error;
+      }
+    }
 
     booking.status = BookingStatus.CANCELLED;
     await booking.save();

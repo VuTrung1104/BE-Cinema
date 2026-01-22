@@ -11,6 +11,6 @@ import { Showtime, ShowtimeSchema } from './schemas/showtime.schema';
   ],
   controllers: [ShowtimesController],
   providers: [ShowtimesService, ShowtimesGateway],
-  exports: [ShowtimesService],
+  exports: [ShowtimesService, ShowtimesGateway],
 })
 export class ShowtimesModule {}

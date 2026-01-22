@@ -1,4 +1,4 @@
-import { IsMongoId, IsDate, IsNumber, Min } from 'class-validator';
+import { IsMongoId, IsDate, IsNumber, Min, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateShowtimeDto {
@@ -19,4 +19,19 @@ export class CreateShowtimeDto {
   @IsNumber()
   @Min(0)
   price: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  totalSeats?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  rows?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  seatsPerRow?: number;
 }

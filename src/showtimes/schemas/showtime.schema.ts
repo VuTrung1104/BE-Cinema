@@ -23,6 +23,15 @@ export class Showtime {
   @Prop({ type: [String], default: [] })
   bookedSeats: string[]; // Array of seat numbers like ['A1', 'A2', 'B5']
 
+  @Prop({ type: Number, default: 80 })
+  totalSeats: number; // Total seats available for this showtime
+
+  @Prop({ type: Number, default: 8 })
+  rows: number; // Number of rows (default 8: A-H)
+
+  @Prop({ type: Number, default: 10 })
+  seatsPerRow: number; // Seats per row (default 10)
+
   // Temporary seat locks (for booking in progress)
   @Prop({
     type: [

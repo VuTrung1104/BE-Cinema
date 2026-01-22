@@ -11,12 +11,14 @@ import { VerifyOTPDto } from './dto/verify-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GetUser } from './decorators/get-user.decorator';
+import { Public } from './decorators/public.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post('register')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 3600000 } }) // 10 requests per hour
@@ -31,6 +33,7 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
+  @Public()
   @Post('login')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 20, ttl: 900000 } }) // 20 requests per 15 minutes
@@ -58,6 +61,7 @@ export class AuthController {
     };
   }
 
+  @Public()
   @Post('send-otp')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 3600000 } }) // 5 requests per hour
@@ -71,6 +75,7 @@ export class AuthController {
     return this.authService.sendOTP(sendOTPDto);
   }
 
+  @Public()
   @Post('verify-otp')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 600000 } }) // 10 requests per 10 minutes
@@ -84,6 +89,7 @@ export class AuthController {
     return this.authService.verifyOTP(verifyOTPDto);
   }
 
+  @Public()
   @Post('forgot-password')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 requests per hour
@@ -97,6 +103,7 @@ export class AuthController {
     return this.authService.forgotPassword(email);
   }
 
+  @Public()
   @Post('reset-password')
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 3600000 } }) // 5 requests per hour
@@ -110,6 +117,7 @@ export class AuthController {
     return this.authService.resetPassword(resetPasswordDto);
   }
 
+  @Public()
   @Get('google')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Google OAuth login', description: 'Redirect to Google for authentication' })
@@ -118,6 +126,7 @@ export class AuthController {
     // Guard redirects to Google
   }
 
+  @Public()
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Google OAuth callback', description: 'Handle Google OAuth callback and return tokens' })
@@ -128,6 +137,7 @@ export class AuthController {
     res.redirect(`${frontendUrl}?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}`);
   }
 
+  @Public()
   @Get('facebook')
   @UseGuards(AuthGuard('facebook'))
   @ApiOperation({ summary: 'Facebook OAuth login', description: 'Redirect to Facebook for authentication' })
@@ -136,6 +146,7 @@ export class AuthController {
     // Guard redirects to Facebook
   }
 
+  @Public()
   @Get('facebook/callback')
   @UseGuards(AuthGuard('facebook'))
   @ApiOperation({ summary: 'Facebook OAuth callback', description: 'Handle Facebook OAuth callback and return tokens' })

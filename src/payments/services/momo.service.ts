@@ -1,163 +1,126 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
-import * as crypto from 'crypto';
-import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
-
-export interface MoMoPaymentDto {
-  orderId: string;
-  amount: number;
-  orderInfo: string;
-  redirectUrl?: string;
-  ipnUrl?: string;
-  extraData?: string;
-}
-
-export interface MoMoPaymentResponse {
-  payUrl: string;
-  deeplink?: string;
-  qrCodeUrl?: string;
-  orderId: string;
-  requestId: string;
-}
+import axios from 'axios';
+import { randomUUID } from 'crypto';
+import { CreateMoMoPaymentDto, MoMoReturnDto, MoMoIPNDto } from '../dto/momo-payment.dto';
+import { buildCreateRawSignature, buildIPNRawSignature, hmacSHA256 } from '../utils/momo.util';
 
 @Injectable()
 export class MomoService {
   private readonly logger = new Logger(MomoService.name);
+  
   private readonly partnerCode: string;
   private readonly accessKey: string;
   private readonly secretKey: string;
-  private readonly endpoint: string;
+  private readonly createUrl: string;
+  private readonly redirectUrl: string;
+  private readonly ipnUrl: string;
 
   constructor(private configService: ConfigService) {
-    this.partnerCode = this.configService.get<string>('MOMO_PARTNER_CODE') || '';
-    this.accessKey = this.configService.get<string>('MOMO_ACCESS_KEY') || '';
-    this.secretKey = this.configService.get<string>('MOMO_SECRET_KEY') || '';
-    this.endpoint = this.configService.get<string>('MOMO_ENDPOINT') || 'https://test-payment.momo.vn/v2/gateway/api/create';
+    this.partnerCode = this.configService.get<string>('MOMO_PARTNER_CODE');
+    this.accessKey = this.configService.get<string>('MOMO_ACCESS_KEY');
+    this.secretKey = this.configService.get<string>('MOMO_SECRET_KEY');
+    this.createUrl = this.configService.get<string>('MOMO_ENDPOINT') || 'https://test-payment.momo.vn/v2/gateway/api/create';
+    this.redirectUrl = this.configService.get<string>('MOMO_REDIRECT_URL') || 'http://localhost:5000/api/v1/payments/momo-return';
+    this.ipnUrl = this.configService.get<string>('MOMO_IPN_URL') || 'http://localhost:5000/api/v1/payments/momo-ipn';
   }
 
   /**
    * Create MoMo payment URL
-   * @param paymentData Payment details
-   * @returns Payment URL and other info
    */
-  async createPayment(paymentData: MoMoPaymentDto): Promise<MoMoPaymentResponse> {
-    const {
-      orderId,
-      amount,
-      orderInfo,
-      redirectUrl = this.configService.get<string>('FRONTEND_URL') + '/payment/result',
-      ipnUrl = this.configService.get<string>('BACKEND_URL') + '/payments/momo/callback',
-      extraData = '',
-    } = paymentData;
-
-    // Generate request ID
-    const requestId = `${orderId}_${Date.now()}`;
+  async createPayment(dto: CreateMoMoPaymentDto & { orderId: string }) {
+    const { orderId, amount, orderInfo = 'Payment with MoMo' } = dto;
+    const requestId = randomUUID();
     const requestType = 'captureWallet';
-    const lang = 'vi';
+    const extraData = '';
 
-    // Create raw signature
-    const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${ipnUrl}&orderId=${orderId}&orderInfo=${orderInfo}&partnerCode=${this.partnerCode}&redirectUrl=${redirectUrl}&requestId=${requestId}&requestType=${requestType}`;
+    // Build signature
+    const rawSignature = buildCreateRawSignature({
+      accessKey: this.accessKey,
+      amount: String(amount),
+      extraData,
+      ipnUrl: this.ipnUrl,
+      orderId,
+      orderInfo,
+      partnerCode: this.partnerCode,
+      redirectUrl: this.redirectUrl,
+      requestId,
+      requestType,
+    });
 
-    // Generate signature using HMAC SHA256
-    const signature = crypto
-      .createHmac('sha256', this.secretKey)
-      .update(rawSignature)
-      .digest('hex');
+    const signature = hmacSHA256(rawSignature, this.secretKey);
 
-    // Prepare request body
-    const requestBody = {
+    const payload = {
       partnerCode: this.partnerCode,
       accessKey: this.accessKey,
       requestId,
-      amount,
+      amount: Number(amount),
       orderId,
       orderInfo,
-      redirectUrl,
-      ipnUrl,
-      extraData,
+      redirectUrl: this.redirectUrl,
+      ipnUrl: this.ipnUrl,
       requestType,
+      extraData,
       signature,
-      lang,
+      lang: 'vi',
     };
 
-    this.logger.log(`Creating MoMo payment for order ${orderId}, amount: ${amount}`);
-
     try {
-      // Send request to MoMo
-      const response = await axios.post(this.endpoint, requestBody, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const { data } = await axios.post(this.createUrl, payload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000,
       });
 
-      const { resultCode, message, payUrl, deeplink, qrCodeUrl } = response.data;
-
-      if (resultCode !== 0) {
-        this.logger.error(`MoMo payment creation failed: ${message}`);
-        throw new BadRequestException(`MoMo payment failed: ${message}`);
+      if (data?.resultCode !== 0) {
+        throw new BadRequestException(
+          `MoMo error (${data?.resultCode}): ${data?.message || 'Unknown error'}`,
+        );
       }
 
-      this.logger.log(`MoMo payment URL created successfully for order ${orderId}`);
-
       return {
-        payUrl,
-        deeplink,
-        qrCodeUrl,
+        payUrl: data.payUrl,
+        qrCodeUrl: data.qrCodeUrl,
         orderId,
         requestId,
       };
     } catch (error) {
-      this.logger.error('Error creating MoMo payment:', error.message);
-      throw new BadRequestException('Failed to create MoMo payment');
+      this.logger.error(`MoMo create payment error: ${error.message}`);
+      throw error;
     }
   }
 
   /**
-   * Verify MoMo callback signature
-   * @param callbackData Data from MoMo callback
-   * @returns true if signature is valid
+   * Verify MoMo IPN/Return signature
    */
-  verifyCallback(callbackData: any): boolean {
-    const {
-      partnerCode,
-      orderId,
-      requestId,
-      amount,
-      orderInfo,
-      orderType,
-      transId,
-      resultCode,
-      message,
-      payType,
-      responseTime,
-      extraData,
-      signature,
-    } = callbackData;
+  verifySignature(data: MoMoReturnDto | MoMoIPNDto): { isValid: boolean } {
+    try {
+      const rawSignature = buildIPNRawSignature({
+        accessKey: this.accessKey,
+        amount: String(data.amount),
+        extraData: data.extraData || '',
+        message: data.message,
+        orderId: data.orderId,
+        orderInfo: data.orderInfo,
+        orderType: data.orderType,
+        partnerCode: this.partnerCode,
+        payType: data.payType || '',
+        requestId: data.requestId,
+        responseTime: String(data.responseTime),
+        resultCode: String(data.resultCode),
+        transId: data.transId || '',
+      });
 
-    // Create raw signature (must match MoMo's order)
-    const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
+      const computedSignature = hmacSHA256(rawSignature, this.secretKey);
+      const isValid = computedSignature === data.signature;
 
-    // Generate signature
-    const expectedSignature = crypto
-      .createHmac('sha256', this.secretKey)
-      .update(rawSignature)
-      .digest('hex');
+      if (!isValid) {
+        this.logger.warn(`Signature mismatch - Expected: ${computedSignature}, Received: ${data.signature}`);
+      }
 
-    const isValid = signature === expectedSignature;
-
-    if (!isValid) {
-      this.logger.warn(`Invalid MoMo callback signature for order ${orderId}`);
+      return { isValid };
+    } catch (error) {
+      this.logger.error(`Verify signature error: ${error.message}`);
+      return { isValid: false };
     }
-
-    return isValid;
-  }
-
-  /**
-   * Check if payment was successful
-   * @param resultCode Result code from MoMo
-   * @returns true if payment successful
-   */
-  isPaymentSuccessful(resultCode: number): boolean {
-    return resultCode === 0;
   }
 }

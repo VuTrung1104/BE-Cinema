@@ -5,6 +5,7 @@ import { CreateMovieDto } from './dto/create-movie.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { UserRole } from '../users/schemas/user.schema';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
@@ -25,6 +26,7 @@ export class MoviesController {
     return this.moviesService.create(createMovieDto);
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all movies with pagination, search and filters' })
   @ApiResponse({ status: 200, description: 'Movies retrieved successfully' })
@@ -52,6 +54,7 @@ export class MoviesController {
     );
   }
 
+  @Public()
   @Get('slug/:slug')
   @ApiOperation({ summary: 'Get movie by slug' })
   @ApiResponse({ status: 200, description: 'Movie found' })
@@ -60,6 +63,7 @@ export class MoviesController {
     return this.moviesService.findBySlug(slug);
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get movie by ID' })
   @ApiResponse({ status: 200, description: 'Movie found' })

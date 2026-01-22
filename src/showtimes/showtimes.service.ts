@@ -27,21 +27,23 @@ export class ShowtimesService {
     }
     
     if (filters?.date) {
-      const startDate = new Date(filters.date);
-      const endDate = new Date(filters.date);
-      endDate.setDate(endDate.getDate() + 1);
+      // Parse date as UTC to match database dates
+      // Input: "2026-01-15" -> Parse as start of day in UTC
+      const startDate = new Date(filters.date + 'T00:00:00.000Z');
+      const endDate = new Date(filters.date + 'T23:59:59.999Z');
       
       query.startTime = {
         $gte: startDate,
-        $lt: endDate,
+        $lte: endDate,
       };
     }
 
-    return this.showtimeModel
+    const results = await this.showtimeModel
       .find(query)
       .populate('movieId')
       .populate('theaterId')
       .exec();
+    return results;
   }
 
   async findOne(id: string) {
@@ -60,10 +62,27 @@ export class ShowtimesService {
 
   async getAvailableSeats(id: string) {
     const showtime = await this.findOne(id);
+    
+    // Clean up expired temp locks
+    const now = new Date();
+    showtime.tempLockedSeats = showtime.tempLockedSeats.filter(
+      (lock) => lock.expiresAt > now
+    );
+    await showtime.save();
+    
+    const totalSeats = showtime.totalSeats || 80;
+    const bookedCount = showtime.bookedSeats?.length || 0;
+    const lockedSeats = showtime.tempLockedSeats.map(lock => lock.seat);
+    
     return {
       showtimeId: id,
-      bookedSeats: showtime.bookedSeats,
-      availableSeats: showtime.bookedSeats.length,
+      bookedSeats: showtime.bookedSeats || [],
+      lockedSeats: lockedSeats,
+      availableSeats: totalSeats - bookedCount - lockedSeats.length,
+      totalSeats: totalSeats,
+      rows: showtime.rows || 8,
+      seatsPerRow: showtime.seatsPerRow || 10,
+      lastUpdate: new Date().toISOString(),
     };
   }
 

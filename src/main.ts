@@ -6,12 +6,16 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { LoggerService } from './common/logger/logger.service';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: new LoggerService(),
   });
   const configService = app.get(ConfigService);
+  
+  // Enable WebSocket with Socket.IO adapter
+  app.useWebSocketAdapter(new IoAdapter(app));
   
   // Enable CORS
   app.enableCors({
