@@ -49,6 +49,8 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        avatar: user.avatar,
+        phone: user.phone,
       },
       ...tokens,
     };
@@ -85,6 +87,8 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        avatar: user.avatar,
+        phone: user.phone,
       },
       ...tokens,
     };

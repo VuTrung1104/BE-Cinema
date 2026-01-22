@@ -13,7 +13,7 @@ import { Showtime } from '../src/showtimes/schemas/showtime.schema';
  * 3. Reference non-existent users
  */
 async function cleanupOrphanedBookings() {
-  console.log('🔍 Starting orphaned bookings cleanup check...\n');
+  console.log('Starting orphaned bookings cleanup check...\n');
 
   const app = await NestFactory.createApplicationContext(AppModule);
 
@@ -28,7 +28,7 @@ async function cleanupOrphanedBookings() {
       createdAt: { $lt: expirationTime },
     });
 
-    console.log(`📊 Found ${expiredBookings.length} expired PENDING bookings`);
+    console.log(`Found ${expiredBookings.length} expired PENDING bookings`);
 
     // Find bookings with invalid showtime references
     const allBookings = await bookingModel.find().select('showtimeId bookingCode').lean();
@@ -40,16 +40,16 @@ async function cleanupOrphanedBookings() {
       (booking) => !showtimeIds.has(booking.showtimeId.toString()),
     );
 
-    console.log(`📊 Found ${orphanedByShowtime.length} bookings with invalid showtime references`);
+    console.log(`Found ${orphanedByShowtime.length} bookings with invalid showtime references`);
 
     // Summary
-    console.log('\n📋 Summary:');
+    console.log('\nSummary:');
     console.log(`   - Expired PENDING bookings: ${expiredBookings.length}`);
     console.log(`   - Bookings with invalid showtime: ${orphanedByShowtime.length}`);
     console.log(`   - Total orphaned bookings: ${expiredBookings.length + orphanedByShowtime.length}`);
 
     if (expiredBookings.length > 0) {
-      console.log('\n⚠️  Expired PENDING Bookings:');
+      console.log('\nExpired PENDING Bookings:');
       expiredBookings.forEach((booking) => {
         const createdAt = (booking as any).createdAt;
         const age = createdAt ? Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60)) : 0;
@@ -58,16 +58,16 @@ async function cleanupOrphanedBookings() {
     }
 
     if (orphanedByShowtime.length > 0) {
-      console.log('\n⚠️  Bookings with Invalid Showtime:');
+      console.log('\nBookings with Invalid Showtime:');
       orphanedByShowtime.forEach((booking) => {
         console.log(`   - ${booking.bookingCode} (showtime: ${booking.showtimeId})`);
       });
     }
 
-    console.log('\n✅ Cleanup check completed. No changes were made.');
-    console.log('💡 To delete these bookings, run: npm run script:delete-orphaned-bookings\n');
+    console.log('\nCleanup check completed. No changes were made.');
+    console.log('To delete these bookings, run: npm run script:delete-orphaned-bookings\n');
   } catch (error) {
-    console.error('❌ Error during cleanup check:', error.message);
+    console.error('Error during cleanup check:', error.message);
     process.exit(1);
   } finally {
     await app.close();

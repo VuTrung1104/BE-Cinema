@@ -66,8 +66,25 @@ export class UsersService {
     return this.findOne(userId);
   }
 
-  async updateUser(userId: string, updateUserDto: UpdateUserDto) {
-    const { email, ...updateData } = updateUserDto;
+  async updateUser(userId: string, updateUserDto: UpdateUserDto, currentUserId?: string) {
+    const { email, role, ...updateData } = updateUserDto;
+
+    // Get target user to check if they're super admin
+    const targetUser = await this.userModel.findById(userId).exec();
+    if (!targetUser) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    // Security: Protect super admin from any modifications
+    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+    if (superAdminEmail && targetUser.email === superAdminEmail) {
+      throw new BadRequestException('Super admin account cannot be modified');
+    }
+
+    // Security: Prevent admin from changing their own role
+    if (role && currentUserId && userId === currentUserId) {
+      throw new BadRequestException('You cannot change your own role');
+    }
 
     if (email) {
       const existingUser = await this.userModel.findOne({ 
@@ -79,6 +96,11 @@ export class UsersService {
         throw new ConflictException('Email is already in use');
       }
       updateData['email'] = email;
+    }
+
+    // Add role to updateData if provided and validation passed
+    if (role !== undefined) {
+      updateData['role'] = role;
     }
 
     const user = await this.userModel

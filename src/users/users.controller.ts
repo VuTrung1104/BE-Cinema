@@ -80,31 +80,35 @@ export class UsersController {
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Update user (Admin only)', description: 'Update user information including role. Requires ADMIN role.' })
+  @ApiOperation({ summary: 'Update user (Admin only)', description: 'Update user information including role. Requires ADMIN role. Cannot change own role.' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request - Cannot change own role' })
   @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing token' })
   @ApiResponse({ status: 403, description: 'Forbidden - Requires ADMIN role' })
   @ApiResponse({ status: 404, description: 'Not found - User does not exist' })
   updateUser(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
+    @GetUser('userId') currentUserId: string,
   ) {
-    return this.usersService.updateUser(id, updateUserDto);
+    return this.usersService.updateUser(id, updateUserDto, currentUserId);
   }
 
   @Put(':id')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Update user (Admin only)', description: 'Update user information including role. Requires ADMIN role.' })
+  @ApiOperation({ summary: 'Update user (Admin only)', description: 'Update user information including role. Requires ADMIN role. Cannot change own role.' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request - Cannot change own role' })
   @ApiResponse({ status: 401, description: 'Unauthorized - Invalid or missing token' })
   @ApiResponse({ status: 403, description: 'Forbidden - Requires ADMIN role' })
   @ApiResponse({ status: 404, description: 'Not found - User does not exist' })
   updateUserPut(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
+    @GetUser('userId') currentUserId: string,
   ) {
-    return this.usersService.updateUser(id, updateUserDto);
+    return this.usersService.updateUser(id, updateUserDto, currentUserId);
   }
 
   // ==================== AVATAR UPLOAD ====================

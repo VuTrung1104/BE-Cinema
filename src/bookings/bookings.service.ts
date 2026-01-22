@@ -253,7 +253,6 @@ export class BookingsService {
         ]
       })
       .populate('userId', 'fullName email')
-      .populate('paymentId', 'method status transactionId')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)

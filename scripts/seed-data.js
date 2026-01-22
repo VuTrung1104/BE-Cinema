@@ -88,20 +88,20 @@ function generateSlug(title) {
 
 async function seedData() {
   try {
-    console.log('🔌 Connecting to MongoDB...');
+    console.log('Connecting to MongoDB...');
     await mongoose.connect(process.env.DATABASE_URL);
-    console.log('✅ Connected to MongoDB\n');
+    console.log('Connected to MongoDB\n');
 
     // Clear existing data
-    console.log('🗑️  Clearing existing data...');
+    console.log('Clearing existing data...');
     await User.deleteMany({});
     await Movie.deleteMany({});
     await Theater.deleteMany({});
     await Showtime.deleteMany({});
-    console.log('✅ Cleared existing data\n');
+    console.log('Cleared existing data\n');
 
     // 1. Seed Admin User
-    console.log('👤 Creating admin user...');
+    console.log('Creating admin user...');
     const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Admin@123', 10);
     const admin = await User.create({
       email: process.env.ADMIN_EMAIL || 'admin@cinema.com',
@@ -112,10 +112,10 @@ async function seedData() {
       isActive: true,
       isEmailVerified: true,
     });
-    console.log(`✅ Admin created: ${admin.email} / ${process.env.ADMIN_PASSWORD || 'Admin@123'}\n`);
+    console.log(`Admin created: ${admin.email} / ${process.env.ADMIN_PASSWORD || 'Admin@123'}\n`);
 
     // 2. Seed Regular Users
-    console.log('👥 Creating regular users...');
+    console.log('Creating regular users...');
     const users = await User.create([
       {
         email: 'user1@gmail.com',
@@ -136,10 +136,10 @@ async function seedData() {
         isEmailVerified: true,
       },
     ]);
-    console.log(`✅ Created ${users.length} regular users\n`);
+    console.log(`Created ${users.length} regular users\n`);
 
     // 3. Seed Movies
-    console.log('🎬 Creating movies...');
+    console.log('Creating movies...');
     const movies = await Movie.create([
       {
         title: 'Avatar: The Way of Water',
@@ -227,10 +227,10 @@ async function seedData() {
         status: 'now-showing',
       },
     ]);
-    console.log(`✅ Created ${movies.length} movies\n`);
+    console.log(`Created ${movies.length} movies\n`);
 
     // 4. Seed Theaters
-    console.log('🏢 Creating theaters...');
+    console.log('Creating theaters...');
     const theaters = await Theater.create([
       {
         name: 'CGV Vincom Center',
@@ -269,10 +269,10 @@ async function seedData() {
         isActive: true,
       },
     ]);
-    console.log(`✅ Created ${theaters.length} theaters\n`);
+    console.log(`Created ${theaters.length} theaters\n`);
 
     // 5. Seed Showtimes
-    console.log('📅 Creating showtimes...');
+    console.log('Creating showtimes...');
     const showtimes = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -330,28 +330,28 @@ async function seedData() {
     }
 
     await Showtime.insertMany(showtimes);
-    console.log(`✅ Created ${showtimes.length} showtimes\n`);
+    console.log(`Created ${showtimes.length} showtimes\n`);
 
     // Summary
-    console.log('📊 SEED DATA SUMMARY:');
+    console.log('SEED DATA SUMMARY:');
     console.log('='.repeat(50));
-    console.log(`👤 Users: ${users.length + 1} (${users.length} regular + 1 admin)`);
-    console.log(`🎬 Movies: ${movies.length} (${movies.filter(m => m.status === 'now-showing').length} now showing)`);
-    console.log(`🏢 Theaters: ${theaters.length}`);
-    console.log(`📅 Showtimes: ${showtimes.length}`);
+    console.log(`Users: ${users.length + 1} (${users.length} regular + 1 admin)`);
+    console.log(`Movies: ${movies.length} (${movies.filter(m => m.status === 'now-showing').length} now showing)`);
+    console.log(`Theaters: ${theaters.length}`);
+    console.log(`Showtimes: ${showtimes.length}`);
     console.log('='.repeat(50));
-    console.log('\n🎉 Seed data created successfully!\n');
+    console.log('\nSeed data created successfully!\n');
 
-    console.log('📝 LOGIN CREDENTIALS:');
+    console.log('LOGIN CREDENTIALS:');
     console.log('  Admin: admin@cinema.com / Admin@123');
     console.log('  User1: user1@gmail.com / User@123');
     console.log('  User2: user2@gmail.com / User@123\n');
 
     await mongoose.disconnect();
-    console.log('👋 Disconnected from MongoDB');
+    console.log('Disconnected from MongoDB');
     process.exit(0);
   } catch (error) {
-    console.error('❌ Error seeding data:', error);
+    console.error('Error seeding data:', error);
     await mongoose.disconnect();
     process.exit(1);
   }

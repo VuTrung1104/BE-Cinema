@@ -13,7 +13,7 @@ import * as readline from 'readline';
  * 2. Reference non-existent showtimes
  */
 async function deleteOrphanedBookings() {
-  console.log('🗑️  Starting orphaned bookings deletion...\n');
+  console.log('Starting orphaned bookings deletion...\n');
 
   const app = await NestFactory.createApplicationContext(AppModule);
 
@@ -41,12 +41,12 @@ async function deleteOrphanedBookings() {
     const totalOrphaned = expiredBookings.length + orphanedByShowtime.length;
 
     if (totalOrphaned === 0) {
-      console.log('✅ No orphaned bookings found. Nothing to delete.\n');
+      console.log('No orphaned bookings found. Nothing to delete.\n');
       await app.close();
       return;
     }
 
-    console.log('📊 Found orphaned bookings:');
+    console.log('Found orphaned bookings:');
     console.log(`   - Expired PENDING bookings: ${expiredBookings.length}`);
     console.log(`   - Bookings with invalid showtime: ${orphanedByShowtime.length}`);
     console.log(`   - Total: ${totalOrphaned}\n`);
@@ -58,18 +58,18 @@ async function deleteOrphanedBookings() {
     });
 
     const answer = await new Promise<string>((resolve) => {
-      rl.question('⚠️  Are you sure you want to DELETE these bookings? (yes/no): ', resolve);
+      rl.question('Are you sure you want to DELETE these bookings? (yes/no): ', resolve);
     });
 
     rl.close();
 
     if (answer.toLowerCase() !== 'yes') {
-      console.log('\n❌ Deletion cancelled.\n');
+      console.log('\nDeletion cancelled.\n');
       await app.close();
       return;
     }
 
-    console.log('\n🔄 Deleting orphaned bookings...');
+    console.log('\nDeleting orphaned bookings...');
 
     let deletedCount = 0;
 
@@ -80,7 +80,7 @@ async function deleteOrphanedBookings() {
         _id: { $in: expiredIds },
       });
       deletedCount += result.deletedCount;
-      console.log(`   ✅ Deleted ${result.deletedCount} expired PENDING bookings`);
+      console.log(`   Deleted ${result.deletedCount} expired PENDING bookings`);
     }
 
     // Delete bookings with invalid showtimes
@@ -90,12 +90,12 @@ async function deleteOrphanedBookings() {
         _id: { $in: orphanedIds },
       });
       deletedCount += result.deletedCount;
-      console.log(`   ✅ Deleted ${result.deletedCount} bookings with invalid showtimes`);
+      console.log(`   Deleted ${result.deletedCount} bookings with invalid showtimes`);
     }
 
-    console.log(`\n✅ Successfully deleted ${deletedCount} orphaned bookings\n`);
+    console.log(`\nSuccessfully deleted ${deletedCount} orphaned bookings\n`);
   } catch (error) {
-    console.error('❌ Error during deletion:', error.message);
+    console.error('Error during deletion:', error.message);
     process.exit(1);
   } finally {
     await app.close();
